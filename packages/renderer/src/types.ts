@@ -7,6 +7,8 @@
  * pixel-identical to the browser preview" true rather than aspirational.
  */
 
+import type { FrameEnergy } from './effects.js';
+
 /** The subset of the Canvas 2D API this renderer uses. */
 export interface Canvas2D {
   /** `string | CanvasGradient | CanvasPattern` in both hosts; we only ever set strings. */
@@ -107,6 +109,14 @@ export interface RenderLayout {
   fundingUnavailable?: boolean;
   /** SPEC §7.2: (b) growing domain is the default, (a) fixed is the option. */
   xMode?: 'growing' | 'fixed';
+  /**
+   * How hard the replay is moving at this frame. See effects.ts.
+   *
+   * Passed in rather than derived here because it depends on the whole frame history,
+   * which `renderFrame` deliberately does not have. Absent means draw nothing extra —
+   * every caller that does not opt in gets the plain chart.
+   */
+  energy?: FrameEnergy;
 }
 
 /** Pixel geometry derived entirely from width/height — no hardcoded positions. */

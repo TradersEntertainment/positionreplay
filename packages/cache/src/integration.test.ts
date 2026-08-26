@@ -53,7 +53,7 @@ function counting(): Net {
   let seen: Record<string, unknown>[] = [];
   return {
     fetch: (url, init) => {
-      seen.push(JSON.parse(init.body) as Record<string, unknown>);
+      seen.push(JSON.parse(init.body ?? '{}') as Record<string, unknown>);
       return inner(url, init);
     },
     calls: () => seen.length,

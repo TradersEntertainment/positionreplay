@@ -142,8 +142,8 @@ function createGet(ctx: AdapterContext, baseUrl: string): BinanceGet {
         try {
           response = await doFetch(url, {
             method: 'GET',
+            // No body: fetch rejects a GET that carries one.
             headers: { Accept: 'application/json' },
-            body: '',
           });
         } catch (error) {
           throw new VenueUnreachableError(baseUrl, error);

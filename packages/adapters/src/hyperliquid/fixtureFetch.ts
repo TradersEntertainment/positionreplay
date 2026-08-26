@@ -63,6 +63,11 @@ export function createFixtureFetch(store: FixtureStore, options: FixtureFetchOpt
   const candlePageLimit = options.candlePageLimit ?? 5000;
 
   return async (_url, init) => {
+    // Hyperliquid's entire API is one POST and the body carries the query, so a
+    // request without one is a caller bug rather than a venue shape to tolerate.
+    if (init.body === undefined) {
+      throw new Error(`Hyperliquid fixture received a ${init.method} with no body.`);
+    }
     const body = JSON.parse(init.body) as Record<string, unknown>;
     options.onRequest?.(body);
 

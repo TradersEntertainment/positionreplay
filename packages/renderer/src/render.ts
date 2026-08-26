@@ -22,6 +22,7 @@ import { drawEntryLine } from './layers/entryLine.js';
 import { drawGrid } from './layers/grid.js';
 import { drawHud } from './layers/hud.js';
 import { drawMarkers } from './layers/markers.js';
+import { drawPulse } from './layers/pulse.js';
 import { drawSeries } from './layers/series.js';
 import { drawWatermark } from './layers/watermark.js';
 import type { LayerContext, MarkerInfo } from './layers/context.js';
@@ -161,6 +162,9 @@ export function renderFrame(
   drawGrid(ctx, context);
   drawEntryLine(ctx, context);
   drawSeries(ctx, context);
+  // Between the series and the markers: it reacts to the chart, and must not sit on
+  // top of the fills, which are the thing being read.
+  drawPulse(ctx, context);
   drawMarkers(ctx, context);
   drawHud(ctx, context);
   drawWatermark(ctx, context);

@@ -23,6 +23,7 @@ import {
   text,
   usd,
 } from '../helpers.js';
+import { blockMeter, flashStrength } from '../effects.js';
 import type { Canvas2D } from '../types.js';
 import type { LayerContext } from './context.js';
 
@@ -97,9 +98,10 @@ function drawIdentity(ctx: Canvas2D, c: LayerContext): void {
 }
 
 function drawTotalPnl(ctx: Canvas2D, c: LayerContext): void {
-  const { theme, metrics, frame } = c;
+  const { theme, metrics, frame, layout } = c;
   const { unit, hud } = metrics;
   const x = metrics.plot.x1 + metrics.axisWidth * 0.6;
+  const energy = layout.energy;
 
   text(ctx, 'TOTAL PNL', x, hud.top, {
     color: theme.hudDim,
@@ -108,14 +110,48 @@ function drawTotalPnl(ctx: Canvas2D, c: LayerContext): void {
     baseline: 'top',
   });
 
-  text(ctx, signedUsd(frame.totalPnl), x, hud.top + hud.lineHeight * 0.75, {
-    color: pnlColor(frame.totalPnl, theme),
-    font: font(theme, unit * 5.2, 'bold'),
+  const color = pnlColor(frame.totalPnl, theme);
+  const value = signedUsd(frame.totalPnl);
+  const valueY = hud.top + hud.lineHeight * 0.75;
+  const valueFont = font(theme, unit * 5.2, 'bold');
+
+  // A new extreme inverts the number: dark text on a solid block of its own colour.
+  // SPEC §7.3 rules out a glow, and inverse video is what a terminal does instead —
+  // it is also far more legible in a 3-second clip than a fade would be.
+  const flash = energy ? flashStrength(energy.sinceExtreme) : 0;
+  if (flash > 0 && energy && (energy.newHigh || energy.newLow || energy.sinceExtreme < 8)) {
+    ctx.save();
+    ctx.globalAlpha = flash;
+    ctx.font = valueFont;
+    const width = ctx.measureText(value).width;
+    const padX = unit * 0.6;
+    ctx.fillStyle = color;
+    ctx.fillRect(x - width - padX, valueY - unit * 0.5, width + padX * 2, unit * 6.2);
+    ctx.restore();
+  }
+
+  text(ctx, value, x, valueY, {
+    // Inverted while the flash is at full strength; the background block is the colour,
+    // so the glyphs have to become the background to stay readable.
+    color: flash >= 1 ? theme.background : color,
+    font: valueFont,
     align: 'right',
     baseline: 'top',
   });
 
-  text(ctx, hudDate(frame.t), x, hud.top + hud.lineHeight * 2.4, {
+  // The meter under the number: where this PnL sits between the replay's own worst and
+  // best. Block characters rather than a drawn bar, because §7.3 asks for a terminal
+  // and because it then survives being scaled to any export size as text.
+  if (energy) {
+    text(ctx, blockMeter(energy.level, 12), x, hud.top + hud.lineHeight * 2.35, {
+      color,
+      font: font(theme, unit * 1.9, 'bold'),
+      align: 'right',
+      baseline: 'top',
+    });
+  }
+
+  text(ctx, hudDate(frame.t), x, hud.top + hud.lineHeight * (energy ? 3.3 : 2.4), {
     color: theme.hudDim,
     font: font(theme, unit * 1.7),
     align: 'right',

@@ -61,7 +61,7 @@ const recordingFetch: FetchLike = async (url, init) => {
   const text = await response.text();
 
   if (response.ok) {
-    const body = JSON.parse(init.body) as Record<string, unknown>;
+    const body = JSON.parse(init.body ?? '{}') as Record<string, unknown>;
     const data = JSON.parse(text) as unknown[];
 
     if (body['type'] === 'userFillsByTime') recorded.fills.push(...data);

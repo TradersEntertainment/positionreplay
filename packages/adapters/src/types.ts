@@ -74,7 +74,16 @@ export interface HttpResponse {
 export interface HttpRequest {
   method: string;
   headers: Record<string, string>;
-  body: string;
+  /**
+   * Absent on GET, and that is not a style choice.
+   *
+   * `fetch` rejects a GET carrying a body — even an empty string — with "Request with
+   * GET/HEAD method cannot have body". Every test double and every fixture replay here
+   * ignores the field, so a `body: ''` on a GET passed the whole suite and failed
+   * against the only implementation that matters. Optional so the type cannot express
+   * the broken call.
+   */
+  body?: string;
 }
 
 export type FetchLike = (url: string, init: HttpRequest) => Promise<HttpResponse>;

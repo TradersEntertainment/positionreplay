@@ -117,7 +117,7 @@ describe('fetchFills pagination (SPEC §4.3)', () => {
     const page2 = Array.from({ length: 500 }, (_, i) => stubFill(2000 + i, 3_001 + i));
 
     const fetch: FetchLike = async (_url, init) => {
-      const body = JSON.parse(init.body) as Record<string, unknown>;
+      const body = JSON.parse(init.body ?? '{}') as Record<string, unknown>;
       requests.push(body);
       return jsonResponse(Number(body['startTime']) <= 1_000 ? page1 : page2);
     };
@@ -175,7 +175,7 @@ describe('fetchFills pagination (SPEC §4.3)', () => {
     let cursor = 0;
 
     const fetch: FetchLike = async (_url, init) => {
-      const body = JSON.parse(init.body) as Record<string, unknown>;
+      const body = JSON.parse(init.body ?? '{}') as Record<string, unknown>;
       const start = Number(body['startTime']);
       if (cursor >= HL_FILL_HISTORY_LIMIT) return jsonResponse([]);
       const page = Array.from({ length: 2000 }, (_, i) => stubFill(cursor + i, start + i));
