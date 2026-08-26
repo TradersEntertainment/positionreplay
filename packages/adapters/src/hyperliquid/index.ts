@@ -5,8 +5,7 @@
  * order, and no key or seed phrase is ever requested (CLAUDE.md, hard rules).
  */
 
-import { HL_INTERVALS } from '@trade-replay/core';
-import type { Fill, FundingEvent, PriceSeries, TimeRange } from '@trade-replay/core';
+import type { Fill, FundingEvent, IntervalSpec, PriceSeries, TimeRange } from '@trade-replay/core';
 import { withCandleCache, withFillCache } from '../cacheHelpers.js';
 import { HL_WEIGHTS } from '../limiter.js';
 import type {
@@ -28,6 +27,24 @@ export { HL_API_BASE } from './client.js';
 export * from './fixtureFetch.js';
 export * from './map.js';
 export * from './schemas.js';
+
+/** SPEC §4.3: `1m 3m 5m 15m 30m 1h 2h 4h 8h 12h 1d 3d 1w 1M`. */
+export const HL_INTERVALS: readonly IntervalSpec[] = [
+  { name: '1m', ms: 60_000 },
+  { name: '3m', ms: 3 * 60_000 },
+  { name: '5m', ms: 5 * 60_000 },
+  { name: '15m', ms: 15 * 60_000 },
+  { name: '30m', ms: 30 * 60_000 },
+  { name: '1h', ms: 60 * 60_000 },
+  { name: '2h', ms: 2 * 60 * 60_000 },
+  { name: '4h', ms: 4 * 60 * 60_000 },
+  { name: '8h', ms: 8 * 60 * 60_000 },
+  { name: '12h', ms: 12 * 60 * 60_000 },
+  { name: '1d', ms: 24 * 60 * 60_000 },
+  { name: '3d', ms: 3 * 24 * 60 * 60_000 },
+  { name: '1w', ms: 7 * 24 * 60 * 60_000 },
+  { name: '1M', ms: 30 * 24 * 60 * 60_000 },
+];
 
 /** SPEC §4.3: max 2000 fills per response. */
 export const HL_FILL_PAGE_LIMIT = 2000;
@@ -281,6 +298,7 @@ async function fetchFunding(
 
 export const hyperliquidAdapter: Adapter = {
   id: 'hyperliquid',
+  intervals: HL_INTERVALS,
   parseInput,
   fetchFills,
   fetchSeries,

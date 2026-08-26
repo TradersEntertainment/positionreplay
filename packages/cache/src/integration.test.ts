@@ -22,7 +22,7 @@ import {
 import { createFixtureFetch } from '@trade-replay/adapters/hyperliquid';
 // Node-only entry: keeps `node:fs` out of any browser bundle importing the adapter.
 import { loadFixtureStore } from '@trade-replay/adapters/hyperliquid/fixtures';
-import { HL_INTERVALS, buildEpisodes, seriesRangeFor, pickInterval } from '@trade-replay/core';
+import { buildEpisodes, seriesRangeFor, pickInterval } from '@trade-replay/core';
 import { createCandleCache, createFillCache } from './index.js';
 import { openCache, type CacheHandle } from './db.js';
 
@@ -209,7 +209,7 @@ describe('a full episode load', () => {
 
       for (const episode of episodes) {
         const seriesRange = seriesRangeFor(episode, NOW);
-        const picked = pickInterval((episode.closedAt ?? NOW) - episode.openedAt, HL_INTERVALS);
+        const picked = pickInterval((episode.closedAt ?? NOW) - episode.openedAt, hyperliquidAdapter.intervals);
         await hyperliquidAdapter.fetchSeries(
           { instrument: episode.instrument, interval: picked.interval, ...seriesRange },
           ctx,

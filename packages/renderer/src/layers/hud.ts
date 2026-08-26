@@ -131,15 +131,21 @@ function drawStatsBar(ctx: Canvas2D, c: LayerContext): void {
   // bar whose numbers do not add up is worse than a longer bar.
   const fundingEstimated = episode.funding.some((f) => f.isEstimate);
 
+  // Unknown is not zero. Polymarket Perps serves per-account funding only to an
+  // authenticated session (SPEC §4.4.2); printing $0.00 would assert none was paid.
+  const fundingUnavailable = c.layout.fundingUnavailable === true;
+
   const cells: [string, string, string][] = [
     ['BOUGHT', usd(frame.bought), theme.hudText],
     ['SOLD', usd(frame.sold), theme.hudText],
     ['FEES', usd(frame.fees), theme.hudText],
-    [
-      fundingEstimated ? 'FUNDING (EST)' : 'FUNDING',
-      signedUsd(frame.funding),
-      fundingEstimated ? theme.notice : pnlColor(frame.funding, theme),
-    ],
+    fundingUnavailable
+      ? ['FUNDING', '—', theme.hudDim]
+      : [
+          fundingEstimated ? 'FUNDING (EST)' : 'FUNDING',
+          signedUsd(frame.funding),
+          fundingEstimated ? theme.notice : pnlColor(frame.funding, theme),
+        ],
     ['REALIZED', signedUsd(frame.realized), pnlColor(frame.realized, theme)],
     ['UNREALIZED', signedUsd(frame.unrealized), pnlColor(frame.unrealized, theme)],
     ['HOLDING', usd(frame.holdingValue), theme.hudText],

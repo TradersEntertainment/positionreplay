@@ -15,7 +15,6 @@ import { createSource, fixtureFromEnv, findWorkspaceRoot } from '@trade-replay/a
 import type { SourceCache } from '@trade-replay/adapters/source';
 import { cacheUrlFor, createCandleCache, createFillCache, openCache } from '@trade-replay/cache';
 import {
-  HL_INTERVALS,
   buildEpisodes,
   decodeReplayId,
   findEpisodeByRef,
@@ -179,7 +178,7 @@ async function loadSparklines(
   await Promise.all(
     [...byInstrument].map(async ([instrument, range]) => {
       // Coarse on purpose: a sparkline needs a shape, not resolution.
-      const picked = pickInterval(range.to - range.from, HL_INTERVALS, { targetFrames: 120 });
+      const picked = pickInterval(range.to - range.from, hyperliquidAdapter.intervals, { targetFrames: 120 });
       try {
         series.set(
           instrument,
@@ -270,7 +269,7 @@ export async function loadReplay(
 
   const now = Date.now();
   const range = seriesRangeFor(episode, now);
-  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, HL_INTERVALS, {
+  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, hyperliquidAdapter.intervals, {
     ...(intervalOverride ? { override: intervalOverride } : {}),
   });
 
@@ -293,7 +292,7 @@ export async function loadReplay(
     series,
     interval: picked.interval,
     barCount: series.kind === 'ohlcv' ? series.candles.length : series.points.length,
-    availableIntervals: HL_INTERVALS.map((i) => i.name),
+    availableIntervals: hyperliquidAdapter.intervals.map((i) => i.name),
     warnings: source.warnings,
     notices,
     ...(source.provenanceWarning ? { provenanceWarning: source.provenanceWarning } : {}),

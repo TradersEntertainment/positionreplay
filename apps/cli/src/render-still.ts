@@ -17,7 +17,7 @@ import { parseArgs } from 'node:util';
 import { GlobalFonts, createCanvas } from '@napi-rs/canvas';
 import { hyperliquidAdapter } from '@trade-replay/adapters';
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
-import { HL_INTERVALS, buildEpisodes, buildFrames, pickInterval, seriesRangeFor } from '@trade-replay/core';
+import { buildEpisodes, buildFrames, pickInterval, seriesRangeFor } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
 import { advanceScale, createScale, darkTheme, lightTheme, renderFrame } from '@trade-replay/renderer';
 import type { Canvas2D } from '@trade-replay/renderer';
@@ -138,7 +138,7 @@ pnpm render:still <address> [options]
   const episode = pickEpisode(episodes, values.episode);
   const now = Date.now();
   const range = seriesRangeFor(episode, now);
-  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, HL_INTERVALS, {
+  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, hyperliquidAdapter.intervals, {
     ...(values.interval ? { override: values.interval } : {}),
   });
 

@@ -24,25 +24,33 @@ interface Placed {
   alpha: number;
   color: string;
   label: string;
+  /** Forced exits are drawn larger, with a ring — colour alone is too subtle. */
+  forced: boolean;
 }
 
-function colorFor(action: string, theme: LayerContext['theme']): string {
-  if (action === 'open' || action === 'scale_in') return theme.markerOpen;
-  if (action === 'flip_out' || action === 'flip_in') return theme.markerFlip;
+function colorFor(marker: MarkerInfo, theme: LayerContext['theme']): string {
+  // A forced exit is not an ordinary close. SPEC §4.4.3 forbids collapsing the two,
+  // and it is the frame a viewer is looking for.
+  if (marker.fill.liquidation || marker.fill.adl) return theme.markerLiquidation;
+  if (marker.action === 'open' || marker.action === 'scale_in') return theme.markerOpen;
+  if (marker.action === 'flip_out' || marker.action === 'flip_in') return theme.markerFlip;
   return theme.markerClose;
 }
 
 function labelFor(marker: MarkerInfo, leverage: number | undefined): string {
-  const verb =
-    marker.action === 'open'
-      ? 'OPEN'
-      : marker.action === 'scale_in'
-        ? 'ADD'
-        : marker.action === 'reduce'
-          ? 'TRIM'
-          : marker.action === 'close'
-            ? 'CLOSE'
-            : 'FLIP';
+  const verb = marker.fill.liquidation
+    ? 'LIQUIDATED'
+    : marker.fill.adl
+      ? 'ADL'
+      : marker.action === 'open'
+        ? 'OPEN'
+        : marker.action === 'scale_in'
+          ? 'ADD'
+          : marker.action === 'reduce'
+            ? 'TRIM'
+            : marker.action === 'close'
+              ? 'CLOSE'
+              : 'FLIP';
   const side = marker.fill.side === 'buy' ? 'BUY' : 'SELL';
   const notional = compactUsd(marker.fill.price * marker.fill.size);
   const lev = leverage === undefined ? '' : ` ${leverage}x`;
@@ -72,8 +80,9 @@ export function drawMarkers(ctx: Canvas2D, c: LayerContext): void {
       y,
       labelY: y,
       alpha,
-      color: colorFor(marker.action, c.theme),
+      color: colorFor(marker, c.theme),
       label: labelFor(marker, c.layout.leverage),
+      forced: Boolean(marker.fill.liquidation || marker.fill.adl),
     });
   }
 
@@ -93,8 +102,17 @@ export function drawMarkers(ctx: Canvas2D, c: LayerContext): void {
 
     ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, dotRadius, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.forced ? dotRadius * 1.8 : dotRadius, 0, Math.PI * 2);
     ctx.fill();
+
+    if (p.forced) {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = Math.max(1, unit * 0.12);
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, dotRadius * 3.2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // Flip the label to the left near the right edge so it never runs off-canvas.
     ctx.font = labelFont;

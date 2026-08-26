@@ -26,6 +26,13 @@ export interface ReplayRef {
 
 const SEPARATOR = '|';
 const VENUES: readonly string[] = ['hyperliquid', 'polymarket-perps', 'csv'];
+/**
+ * Venues whose accounts are EVM addresses.
+ *
+ * CSV has no wallet at all, so it takes the looser form; everything else must look
+ * like an address before this value is handed to an adapter.
+ */
+const EVM_VENUES: readonly string[] = ['hyperliquid', 'polymarket-perps'];
 const EVM_ADDRESS = /^0x[a-f0-9]{40}$/;
 const GENERIC_ACCOUNT = /^[a-zA-Z0-9.:_-]{1,128}$/;
 const INSTRUMENT = /^[\x20-\x7e]{1,128}$/;
@@ -122,8 +129,9 @@ export function decodeReplayId(id: string): ReplayRef | null {
   if (!Number.isSafeInteger(openedAt) || openedAt < 0) return null;
   if (!Number.isSafeInteger(ordinal) || ordinal < 0) return null;
 
-  const addressOk =
-    venue === 'hyperliquid' ? EVM_ADDRESS.test(address) : GENERIC_ACCOUNT.test(address);
+  const addressOk = EVM_VENUES.includes(venue)
+    ? EVM_ADDRESS.test(address)
+    : GENERIC_ACCOUNT.test(address);
   if (!addressOk) return null;
 
   return { venue: venue as VenueId, address, instrument, openedAt, ordinal };

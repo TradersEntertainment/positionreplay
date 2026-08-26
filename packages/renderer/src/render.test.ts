@@ -430,3 +430,97 @@ describe('renderFrame — theme and geometry', () => {
     expect(frames).toHaveLength(0);
   });
 });
+
+/** SPEC §4.4.3: forced exits must not look like ordinary closes. */
+describe('renderFrame — liquidation and ADL', () => {
+  function forcedScenario(flag: 'liquidation' | 'adl') {
+    const episode = buildEpisodes(
+      [
+        fill({ id: 'open', ts: 10 * MIN, side: 'buy', price: 100, size: 10 }),
+        fill({ id: 'out', ts: 40 * MIN, side: 'sell', price: 60, size: 10, [flag]: true }),
+      ],
+      HL,
+    )[0]!;
+    const series = makeSeries(50, (i) => 100 - i);
+    return { episode, series, frames: buildFrames(episode, series) };
+  }
+
+  it('labels a liquidation as such, not as a close', () => {
+    const { episode, series, frames } = forcedScenario('liquidation');
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames.at(-1)!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    expect(texts(calls).some((t) => t.includes('LIQUIDATED'))).toBe(true);
+    expect(texts(calls).some((t) => t.startsWith('CLOSE '))).toBe(false);
+  });
+
+  it('labels an ADL distinctly from a liquidation', () => {
+    const { episode, series, frames } = forcedScenario('adl');
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames.at(-1)!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    expect(texts(calls).some((t) => t.includes('ADL'))).toBe(true);
+  });
+
+  it('draws a forced exit in the venue-liquidation colour', () => {
+    const { episode, series, frames } = forcedScenario('liquidation');
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames.at(-1)!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    const used = calls.filter((c) => c.op === 'set:fillStyle').map((c) => c.args[0]);
+    expect(used).toContain(darkTheme.markerLiquidation);
+  });
+
+  it('draws an ordinary close without it', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames.at(-1)!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    const used = calls.filter((c) => c.op === 'set:fillStyle').map((c) => c.args[0]);
+    expect(used).not.toContain(darkTheme.markerLiquidation);
+  });
+});
+
+/** CLAUDE.md: show an unavailable value as unavailable, never as a number. */
+describe('renderFrame — funding unavailable', () => {
+  it('shows a dash rather than $0.00 when the venue cannot tell us', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      fundingUnavailable: true,
+    });
+
+    // Other cells legitimately read $0.00 at this frame, so check the FUNDING cell
+    // itself: the stats bar draws each label and its value at the same x.
+    const drawn = calls
+      .filter((c) => c.op === 'fillText')
+      .map((c) => ({ text: String(c.args[0]), x: Number(c.args[1]), y: Number(c.args[2]) }));
+
+    const label = drawn.find((d) => d.text === 'FUNDING');
+    expect(label).toBeDefined();
+
+    const value = drawn.find((d) => d.x === label!.x && d.y > label!.y);
+    // $0.00 here would assert that no funding was paid.
+    expect(value?.text).toBe('—');
+  });
+
+  it('still prints a real funding figure when the venue does report one', () => {
+    const withFunding = scenario([
+      { id: 'f1', ts: 20 * MIN, instrument: 'HYPE-PERP', amount: -3, isEstimate: false, raw: null },
+    ]);
+    const { ctx, calls } = recordingContext();
+    renderFrame(
+      ctx,
+      withFunding.frames[30]!,
+      withFunding.episode,
+      withFunding.series,
+      createScale(),
+      darkTheme,
+      LAYOUT,
+    );
+
+    expect(texts(calls)).toContain('-$3.00');
+    expect(texts(calls)).not.toContain('—');
+  });
+});

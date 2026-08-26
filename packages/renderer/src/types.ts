@@ -97,6 +97,14 @@ export interface RenderLayout {
    * as fact.
    */
   notices?: string[];
+  /**
+   * The venue cannot tell us this account's funding charges.
+   *
+   * Polymarket Perps serves funding *rates* publicly but per-account amounts only to an
+   * authenticated session (SPEC §4.4.2). Drawing $0.00 would assert that no funding was
+   * paid, so the HUD shows it as unavailable instead — same rule as leverage.
+   */
+  fundingUnavailable?: boolean;
   /** SPEC §7.2: (b) growing domain is the default, (a) fixed is the option. */
   xMode?: 'growing' | 'fixed';
 }

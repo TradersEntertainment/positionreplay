@@ -145,6 +145,23 @@ describe('decodeReplayId — hostile input', () => {
     }
   });
 
+  it('holds Perps to the same address shape as Hyperliquid', () => {
+    // Both venues are EVM accounts; only CSV has no wallet.
+    const forged = Buffer.from('polymarket-perps|../../etc/passwd|pm:1|1000|0', 'utf8').toString(
+      'base64url',
+    );
+    expect(decodeReplayId(forged)).toBeNull();
+
+    const valid = encodeReplayId({
+      venue: 'polymarket-perps',
+      address: ADDRESS,
+      instrument: 'pm:1',
+      openedAt: 1_000,
+      ordinal: 0,
+    });
+    expect(decodeReplayId(valid)).toMatchObject({ venue: 'polymarket-perps', instrument: 'pm:1' });
+  });
+
   it('rejects an address that is not an address', () => {
     const forged = Buffer.from(`hyperliquid|../../etc/passwd|X-PERP|1000|0`, 'utf8').toString(
       'base64url',

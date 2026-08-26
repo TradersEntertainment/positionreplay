@@ -5,7 +5,14 @@
  * `@trade-replay/core` or `@trade-replay/renderer` (CLAUDE.md: "Adapters never leak").
  */
 
-import type { Fill, FundingEvent, PriceSeries, TimeRange, VenueId } from '@trade-replay/core';
+import type {
+  Fill,
+  FundingEvent,
+  IntervalSpec,
+  PriceSeries,
+  TimeRange,
+  VenueId,
+} from '@trade-replay/core';
 
 export interface AdapterInput {
   venue: VenueId;
@@ -176,6 +183,14 @@ export interface AdapterContext {
 
 export interface Adapter {
   id: VenueId;
+
+  /**
+   * Candle intervals this venue offers, coarsest-last.
+   *
+   * Exposed here so callers pick an interval without importing a venue constant —
+   * `pickInterval` takes the table as an argument for exactly this reason.
+   */
+  intervals: readonly IntervalSpec[];
 
   /**
    * Validate + normalize whatever the user typed.

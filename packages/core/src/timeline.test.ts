@@ -1,11 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { buildEpisodes } from './episodes.js';
-import { HL_INTERVALS, buildFrames, pickInterval, seriesRangeFor } from './timeline.js';
+import { buildFrames, pickInterval, seriesRangeFor } from './timeline.js';
+import type { IntervalSpec } from './timeline.js';
 import { fill, funding } from './test-helpers.js';
 import type { Candle, PriceSeries } from './types.js';
 
 const HL = { venue: 'hyperliquid' } as const;
 const MIN = 60_000;
+
+/**
+ * A venue-shaped interval table, defined locally.
+ *
+ * Core must not import one from an adapter, and it no longer ships one of its own —
+ * `pickInterval` takes the table as an argument so this package never learns which
+ * venues exist.
+ */
+const INTERVALS: readonly IntervalSpec[] = [
+  { name: '1m', ms: 60_000 },
+  { name: '3m', ms: 3 * 60_000 },
+  { name: '5m', ms: 5 * 60_000 },
+  { name: '15m', ms: 15 * 60_000 },
+  { name: '30m', ms: 30 * 60_000 },
+  { name: '1h', ms: 60 * 60_000 },
+  { name: '2h', ms: 2 * 60 * 60_000 },
+  { name: '4h', ms: 4 * 60 * 60_000 },
+  { name: '8h', ms: 8 * 60 * 60_000 },
+  { name: '12h', ms: 12 * 60 * 60_000 },
+  { name: '1d', ms: 24 * 60 * 60_000 },
+  { name: '3d', ms: 3 * 24 * 60 * 60_000 },
+  { name: '1w', ms: 7 * 24 * 60 * 60_000 },
+  { name: '1M', ms: 30 * 24 * 60 * 60_000 },
+];
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
@@ -22,12 +47,12 @@ function ohlcv(from: number, stepMs: number, count: number, close: (i: number) =
 describe('pickInterval (SPEC §6.1)', () => {
   it('picks an interval landing near the target frame count', () => {
     // 200 hours: 1h gives ~230 bars over the padded window — closest to 200.
-    const picked = pickInterval(200 * HOUR, HL_INTERVALS);
+    const picked = pickInterval(200 * HOUR, INTERVALS);
     expect(picked.interval).toBe('1h');
   });
 
   it('falls back to coarse intervals for a months-long position (§11 case 5)', () => {
-    const picked = pickInterval(120 * DAY, HL_INTERVALS);
+    const picked = pickInterval(120 * DAY, INTERVALS);
     // 1m over 120 days is 172,800 bars — far past the 5000 cap.
     expect(['4h', '8h', '12h', '1d']).toContain(picked.interval);
     expect(picked.count).toBeLessThanOrEqual(5000);
@@ -35,13 +60,13 @@ describe('pickInterval (SPEC §6.1)', () => {
 
   it('never exceeds the venue 5000-candle cap', () => {
     for (const duration of [MIN, HOUR, DAY, 30 * DAY, 365 * DAY]) {
-      const picked = pickInterval(duration, HL_INTERVALS);
+      const picked = pickInterval(duration, INTERVALS);
       expect(picked.count, `duration ${duration}`).toBeLessThanOrEqual(5000);
     }
   });
 
   it('warns and uses the finest interval for a 90-second position (§11 case 6)', () => {
-    const picked = pickInterval(90_000, HL_INTERVALS);
+    const picked = pickInterval(90_000, INTERVALS);
     expect(picked.interval).toBe('1m');
     // 90s cannot produce 40 bars at 1m — this must be surfaced, not silently rendered.
     expect(picked.belowMinimum).toBe(true);
@@ -49,13 +74,13 @@ describe('pickInterval (SPEC §6.1)', () => {
   });
 
   it('does not warn when the interval comfortably clears the minimum', () => {
-    const picked = pickInterval(200 * HOUR, HL_INTERVALS);
+    const picked = pickInterval(200 * HOUR, INTERVALS);
     expect(picked.belowMinimum).toBe(false);
     expect(picked.warning).toBeUndefined();
   });
 
   it('honours an explicit override while still reporting the resulting count', () => {
-    const picked = pickInterval(200 * HOUR, HL_INTERVALS, { override: '1d' });
+    const picked = pickInterval(200 * HOUR, INTERVALS, { override: '1d' });
     expect(picked.interval).toBe('1d');
     expect(picked.count).toBeGreaterThan(0);
   });

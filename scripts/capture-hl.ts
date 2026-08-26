@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { hyperliquidAdapter } from '@trade-replay/adapters';
 import type { AdapterWarning, FetchLike } from '@trade-replay/adapters';
 import { coinForInstrument } from '@trade-replay/adapters/hyperliquid';
-import { HL_INTERVALS, buildEpisodes, pickInterval, seriesRangeFor } from '@trade-replay/core';
+import { buildEpisodes, pickInterval, seriesRangeFor } from '@trade-replay/core';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -137,12 +137,12 @@ async function main(): Promise<void> {
   const wanted = new Set<string>();
   for (const episode of episodes) {
     const seriesRange = seriesRangeFor(episode, Date.now());
-    const picked = pickInterval((episode.closedAt ?? Date.now()) - episode.openedAt, HL_INTERVALS);
-    const index = HL_INTERVALS.findIndex((i) => i.name === picked.interval);
+    const picked = pickInterval((episode.closedAt ?? Date.now()) - episode.openedAt, hyperliquidAdapter.intervals);
+    const index = hyperliquidAdapter.intervals.findIndex((i) => i.name === picked.interval);
     const coin = coinForInstrument(episode.instrument);
 
     for (const offset of [-1, 0, 1]) {
-      const neighbour = HL_INTERVALS[index + offset];
+      const neighbour = hyperliquidAdapter.intervals[index + offset];
       if (neighbour) wanted.add(`${coin}|${neighbour.name}|${seriesRange.from}|${seriesRange.to}`);
     }
   }

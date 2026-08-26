@@ -32,6 +32,16 @@ export interface Fill {
   closedPnl?: number;
   /** The venue's own label, e.g. "Open Long". Cross-check only, never the source of truth. */
   dir?: string;
+  /**
+   * The position was force-closed by the venue.
+   *
+   * SPEC §4.4.3: "a liquidation is the single most interesting frame in a replay, and no
+   * other venue in this spec hands it to us as a flag. Do not collapse them into a
+   * generic 'close' marker."
+   */
+  liquidation?: boolean;
+  /** Auto-deleveraged by the venue — distinct from a liquidation, and rarer. */
+  adl?: boolean;
   /** Original payload, kept for debugging. */
   raw: unknown;
 }

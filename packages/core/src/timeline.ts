@@ -9,29 +9,18 @@
 import { totalPnl, unrealizedFor } from './pnl.js';
 import type { Fill, Frame, FundingEvent, PositionEpisode, PriceSeries, TimeRange } from './types.js';
 
+/**
+ * One selectable candle interval.
+ *
+ * The table of them belongs to its venue, not here: interval vocabularies are
+ * venue-specific, and `pickInterval` takes the table as an argument precisely so core
+ * never has to know which venues exist (CLAUDE.md: "Adapters never leak").
+ */
 export interface IntervalSpec {
   /** Venue interval name, passed straight back to the adapter. */
   name: string;
   ms: number;
 }
-
-/** SPEC §4.3: the intervals Hyperliquid exposes on `candleSnapshot`. */
-export const HL_INTERVALS: readonly IntervalSpec[] = [
-  { name: '1m', ms: 60_000 },
-  { name: '3m', ms: 3 * 60_000 },
-  { name: '5m', ms: 5 * 60_000 },
-  { name: '15m', ms: 15 * 60_000 },
-  { name: '30m', ms: 30 * 60_000 },
-  { name: '1h', ms: 60 * 60_000 },
-  { name: '2h', ms: 2 * 60 * 60_000 },
-  { name: '4h', ms: 4 * 60 * 60_000 },
-  { name: '8h', ms: 8 * 60 * 60_000 },
-  { name: '12h', ms: 12 * 60 * 60_000 },
-  { name: '1d', ms: 24 * 60 * 60_000 },
-  { name: '3d', ms: 3 * 24 * 60 * 60_000 },
-  { name: '1w', ms: 7 * 24 * 60 * 60_000 },
-  { name: '1M', ms: 30 * 24 * 60 * 60_000 },
-];
 
 /** SPEC §6.1 tuning constants. */
 export const PAD_BEFORE_RATIO = 0.15;
