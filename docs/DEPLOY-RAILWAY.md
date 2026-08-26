@@ -57,6 +57,13 @@ alone it binds that single interface —
 healthcheck until the deploy is marked dead. The wrapper defaults it to `0.0.0.0`.
 `BIND_HOST` overrides that if binding one interface is ever actually meant.
 
+`0.0.0.0` is IPv4 only. Railway's private network here advertises both families, so the
+worker reaches `*.railway.internal` over IPv4 and this is fine. If a future setup makes
+private networking IPv6-only, the symptom is the public healthcheck passing while the
+worker cannot reach `WEB_URL` at all, and the fix is `BIND_HOST=::` — Node opens a
+dual-stack socket for that, covering both. It is not the default because a host without
+IPv6 refuses it outright (`EAFNOSUPPORT`) and the server then starts on nothing.
+
 ### Volume
 Mount path `/data`, 1 GB to start. Candle data is small and it is text.
 
