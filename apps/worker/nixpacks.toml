@@ -1,0 +1,9 @@
+# SPEC §15.1 step 4: "Nixpacks won't install it."
+#
+# ffmpeg is the one system dependency this service has. @napi-rs/canvas ships prebuilt
+# binaries and needs none — that is why it was chosen over node-canvas.
+#
+# src/preflight.ts checks both at boot and refuses to start if either is missing, so a
+# broken image fails at deploy rather than on the first render someone requests.
+[phases.setup]
+aptPkgs = ["ffmpeg"]

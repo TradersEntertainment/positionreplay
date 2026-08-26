@@ -64,6 +64,24 @@ pnpm verify:m6
 pnpm verify:m7
 ```
 
+`verify:m8` also needs a render worker and ffmpeg:
+
+```bash
+# The database path web actually opened — the worker must use the same one.
+curl -s localhost:3100/api/health | jq -r .database
+
+DATABASE_URL=file:.data/cache-fixture-synthetic.db \
+  WEB_URL=http://127.0.0.1:3100 pnpm worker &
+pnpm verify:m8
+```
+
+`verify:m8` clicks Download MP4, waits for the worker, and then decodes the result:
+ffprobe has to report H.264 with yuv420p, and a frame pulled out of the MP4 is compared
+against the same frame pulled out of the browser-recorded WebM. That last check is the
+one SPEC §9 actually promises — "server output is pixel-identical to the browser
+preview" — and it currently measures a mean channel difference of ~1/255, which is two
+lossy codecs disagreeing rather than two renderers.
+
 `verify:m7` uploads a CSV through the real browser flow, then proves the mapping step
 is not decorative: it unmaps the fee column, re-applies, and checks the reconstructed
 PnL moved by exactly the fees in the file. It also drives SPEC §4.6's fallback —
@@ -91,6 +109,7 @@ packages/renderer    pure Canvas 2D; runs in a browser AND in Node
 packages/cache       SPEC §10 caching on SQLite via Drizzle
 apps/web             Next.js browser + player + /api adapter proxies
 apps/cli             episodes / render-still / verify:m1
+apps/worker          the MP4 render worker: poll, render, ffmpeg
 scripts/             capture-hl / capture-pm / capture-binance, verify-m3…m7,
                      the three synthetic fixture generators
 fixtures/            recorded and synthetic venue responses
@@ -105,6 +124,36 @@ Three boundaries are load-bearing and enforced, not just documented:
 - **Venue shapes stop at the adapter.** Everything above speaks core types only.
 - **The cache depends on adapters, never the reverse.** Inverting it would make the
   graph circular and drag a native SQLite binding into every bundle touching an adapter.
+
+## MP4 export
+
+WebM and GIF are made in the browser. MP4 is not: X requires H.264 with yuv420p, which
+no browser will encode, so it is rendered server-side by `apps/worker` — the same
+`renderFrame`, running under `@napi-rs/canvas`, then piped through ffmpeg. That sharing
+is the whole reason the renderer is kept pure.
+
+```bash
+pnpm worker        # needs ffmpeg on PATH; refuses to start without it
+```
+
+The worker reaches the job queue two ways, because the deployment decides which is
+possible:
+
+- **`sqlite`** (default) — it opens the job table directly. Correct when web and worker
+  share a filesystem: local development, one container, one VM.
+- **`http`** — it asks web for work and posts the finished file back. SPEC §15.1 is
+  explicit that a Railway volume attaches to one service only and that sharing SQLite
+  over a mount corrupts it, so this is the shape that deploys there. Set
+  `RENDER_WORKER_TOKEN` to the same value on both services and it is selected
+  automatically; the endpoints are closed entirely when it is unset.
+
+Frames are not held for a fixed duration. SPEC §6.3's "slow finish" plays the last 10%
+of frames at 0.3x, so the worker writes an ffconcat playlist with a duration per frame
+rather than using `-r 30`, and the exported file is the same length as the replay that
+was previewed.
+
+If a render never starts, the usual cause is web and worker looking at different
+databases. `GET /api/health` reports the path web opened.
 
 ## Cache
 

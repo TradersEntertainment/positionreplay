@@ -98,13 +98,18 @@ async function run(browser: Browser): Promise<void> {
     codec ?? 'no codec — button disabled',
   );
 
-  // --- MP4 is present, disabled, and says why (SPEC §9 / CLAUDE.md) ---
+  // --- MP4 is offered, and routed (SPEC §9: "which routes to Phase 2 when available") ---
+  //
+  // Until M8 this asserted the opposite: the button was disabled and labelled "not
+  // built yet", because a WebM wearing an .mp4 name would be worse than admitting it.
+  // Phase 2 exists now, so the honest assertion is that the button is live. Whether
+  // the file it produces is really H.264 is verify:m8's job, not this one's.
   const mp4 = page.getByTestId('export-mp4');
   const mp4Disabled = await mp4.isDisabled();
   const mp4Label = ((await mp4.textContent()) ?? '').trim();
   record(
-    'MP4 admits it is not built yet',
-    mp4Disabled && /not built/i.test(mp4Label),
+    'MP4 is offered and does not pretend to be made in the browser',
+    !mp4Disabled && !/not built/i.test(mp4Label) && /Download MP4/i.test(mp4Label),
     `disabled=${mp4Disabled}, label="${mp4Label}"`,
   );
 

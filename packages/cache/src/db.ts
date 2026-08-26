@@ -140,6 +140,30 @@ function applySchema(db: CacheDb): void {
       ON candle_coverage (venue, instrument, interval, from_ts)
   `);
   db.run(sql`
+    CREATE TABLE IF NOT EXISTS render_jobs (
+      id TEXT PRIMARY KEY,
+      request_key TEXT NOT NULL,
+      spec TEXT NOT NULL,
+      status TEXT NOT NULL,
+      attempts INTEGER NOT NULL,
+      claimed_by TEXT,
+      claimed_at INTEGER,
+      frames_done INTEGER NOT NULL,
+      frame_count INTEGER NOT NULL,
+      output_path TEXT,
+      output_bytes INTEGER,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+  db.run(sql`
+    CREATE INDEX IF NOT EXISTS render_jobs_request_idx ON render_jobs (request_key, status)
+  `);
+  db.run(sql`
+    CREATE INDEX IF NOT EXISTS render_jobs_status_idx ON render_jobs (status, created_at)
+  `);
+  db.run(sql`
     CREATE TABLE IF NOT EXISTS csv_documents (
       id TEXT PRIMARY KEY,
       filename TEXT NOT NULL,

@@ -92,6 +92,7 @@ export default async function ReplayPage({
           notices={replay.notices}
           fundingUnavailable={replay.fundingUnavailable}
           shareUrl={`/r/${replay.replayId}`}
+          replayId={replay.replayId}
         />
       </div>
     </main>

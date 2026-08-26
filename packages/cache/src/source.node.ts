@@ -20,9 +20,17 @@ import { openCache } from './db.js';
  * stamped everywhere they surface; letting them share a database with live data would
  * quietly undo that, since the two are indistinguishable once they are rows.
  */
-export function cacheUrlFor(fixture?: string, venue = 'hyperliquid'): string {
+export function cacheUrlFor(fixture?: string, venue?: string): string {
   if (fixture === undefined) return process.env['DATABASE_URL'] ?? 'file:.data/cache.db';
-  const slug = `${venue}-${fixture}`.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  // No venue means "every venue in one file" — which is what the web app is, since it
+  // holds one connection and serves them all. Naming that file after a venue it does
+  // not belong to sends anyone looking for it (a worker, an operator) to the wrong
+  // path, and the symptom is a queue that appears to be ignored.
+  const slug = [venue, fixture]
+    .filter((part): part is string => Boolean(part))
+    .join('-')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   return `file:.data/cache-fixture-${slug || 'fixture'}.db`;
 }
 

@@ -112,3 +112,36 @@ export const csvDocuments = sqliteTable('csv_documents', {
   symbols: text('symbols', { mode: 'json' }).notNull(),
   createdAt: integer('created_at').notNull(),
 });
+
+/**
+ * Render jobs. SPEC §9 Phase 2, §15 "Render jobs".
+ *
+ * `requestKey` is what makes a job idempotent: it is derived from the render request
+ * itself, so a double-clicked button finds the existing row instead of starting a
+ * second ffmpeg run for the same video.
+ */
+export const renderJobs = sqliteTable(
+  'render_jobs',
+  {
+    id: text('id').primaryKey(),
+    requestKey: text('request_key').notNull(),
+    spec: text('spec', { mode: 'json' }).notNull(),
+    /** queued | running | done | failed */
+    status: text('status').notNull(),
+    attempts: integer('attempts').notNull(),
+    claimedBy: text('claimed_by'),
+    /** Renewed on every progress report; a lapsed value means the worker died. */
+    claimedAt: integer('claimed_at'),
+    framesDone: integer('frames_done').notNull(),
+    frameCount: integer('frame_count').notNull(),
+    outputPath: text('output_path'),
+    outputBytes: integer('output_bytes'),
+    error: text('error'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('render_jobs_request_idx').on(table.requestKey, table.status),
+    index('render_jobs_status_idx').on(table.status, table.createdAt),
+  ],
+);

@@ -19,6 +19,7 @@ import {
   createCsvDocumentStore,
   createFillCache,
   openCache,
+  type CacheHandle,
 } from '@trade-replay/cache';
 import type { CsvDocumentStore } from '@trade-replay/adapters';
 import {
@@ -40,24 +41,27 @@ import type { PositionEpisode, PriceSeries, TimeRange, VenueId } from '@trade-re
  *
  * A cache is an optimisation: if it cannot be opened, requests still work uncached.
  */
-let sharedCache: SourceCache | null | undefined;
+let sharedHandle: CacheHandle | null | undefined;
+let sharedCache: SourceCache | undefined;
 /** SPEC §4.6's uploaded documents, on the same connection. */
 let sharedCsvStore: CsvDocumentStore | undefined;
 
-function cache(): SourceCache | undefined {
-  if (sharedCache === undefined) {
+/**
+ * The one connection, or null when the database could not be opened.
+ *
+ * Exported because the render queue (SPEC §9 Phase 2) is a different consumer of the
+ * same file with a different failure policy: a missing cache degrades to uncached
+ * reads, a missing queue means MP4 export is unavailable and has to say so.
+ */
+export function cacheHandle(): CacheHandle | undefined {
+  if (sharedHandle === undefined) {
     try {
-      const handle = openCache({
+      sharedHandle = openCache({
+        // No venue argument: this connection serves every venue, and the render
+        // worker has to be able to find the same file (SPEC §15).
         url: cacheUrlFor(fixtureFromEnv()),
         cwd: findWorkspaceRoot(),
       });
-      sharedCsvStore = createCsvDocumentStore(handle.db);
-      sharedCache = {
-        candleCache: createCandleCache(handle.db),
-        fillCache: createFillCache(handle.db),
-        // The connection outlives any single request, so a request must not close it.
-        close: () => undefined,
-      };
     } catch (error) {
       // Degrading to uncached is correct, but doing it silently is not: a misconfigured
       // volume or an unbundled native binding would look like the cache simply never
@@ -67,15 +71,42 @@ function cache(): SourceCache | undefined {
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      sharedCache = null;
+      sharedHandle = null;
     }
   }
-  return sharedCache ?? undefined;
+  return sharedHandle ?? undefined;
+}
+
+function cache(): SourceCache | undefined {
+  const handle = cacheHandle();
+  if (!handle) return undefined;
+
+  if (sharedCache === undefined) {
+    sharedCsvStore = createCsvDocumentStore(handle.db);
+    sharedCache = {
+      candleCache: createCandleCache(handle.db),
+      fillCache: createFillCache(handle.db),
+      // The connection outlives any single request, so a request must not close it.
+      close: () => undefined,
+    };
+  }
+  return sharedCache;
 }
 
 /** True when the database is reachable — the /api/health probe (SPEC §15.1). */
 export function cacheAvailable(): boolean {
   return cache() !== undefined;
+}
+
+/**
+ * The database file this process actually opened.
+ *
+ * Reported by /api/health because the render worker must poll the same file, and a
+ * mismatch presents as a queue nothing ever picks up — which looks like a dead worker
+ * rather than like two processes talking past each other.
+ */
+export function cacheDatabasePath(): string | null {
+  return cacheHandle()?.path ?? null;
 }
 
 /**

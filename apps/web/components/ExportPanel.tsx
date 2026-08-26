@@ -17,6 +17,8 @@ import {
   ExportUnsupportedError,
   GIF_FPS,
   GIF_MAX_FRAMES,
+  RenderJobError,
+  awaitMp4,
   downloadBlob,
   encodeGif,
   exportFilename,
@@ -24,11 +26,13 @@ import {
   pickVideoMimeType,
   planGif,
   recordVideo,
+  renderProgress,
+  requestMp4,
   type ExportPreset,
   type ExportScene,
 } from '@/lib/export';
 
-type Job = 'video' | 'gif' | null;
+type Job = 'video' | 'gif' | 'mp4' | null;
 
 export interface ExportPanelProps {
   episode: PositionEpisode;
@@ -38,10 +42,15 @@ export interface ExportPanelProps {
   notices: string[];
   fundingUnavailable?: boolean;
   shareUrl: string;
+  /** SPEC §9 Phase 2: what the worker is asked to render. */
+  replayId: string;
+  /** SPEC §6.3's climax easing, so the MP4 matches what the player just played. */
+  slowFinish?: boolean;
 }
 
 export function ExportPanel(props: ExportPanelProps) {
   const { episode, series, address, interval, notices, fundingUnavailable, shareUrl } = props;
+  const { replayId, slowFinish = false } = props;
 
   // Built here rather than passed from the server: Frame[] is large, and buildFrames is
   // pure and cheap enough that shipping it would only inflate the page payload.
@@ -93,7 +102,7 @@ export function ExportPanel(props: ExportPanelProps) {
           });
           downloadBlob(result.blob, exportFilename(scene, result.extension));
           setStatus(`${formatBytes(result.blob.size)} · ${result.mimeType}`);
-        } else {
+        } else if (kind === 'gif') {
           const result = await encodeGif(scene, preset, {
             onProgress: setProgress,
             signal: controller.signal,
@@ -102,10 +111,41 @@ export function ExportPanel(props: ExportPanelProps) {
           setStatus(
             `${formatBytes(result.blob.size)} · ${result.frames} frames · ${result.width}×${result.height}`,
           );
+        } else {
+          // SPEC §9 Phase 2. The work happens on the server, so this is a queue and a
+          // poll rather than a render; the browser never sees a frame of it.
+          setStatus('Queued on the render worker…');
+          const queued = await requestMp4({
+            replayId,
+            preset,
+            slowFinish,
+            interval,
+          });
+          const done = await awaitMp4(queued.id, {
+            signal: controller.signal,
+            onProgress: (update) => {
+              const fraction = renderProgress(update);
+              if (fraction !== null) setProgress(fraction);
+              setStatus(
+                update.status === 'queued'
+                  ? 'Queued on the render worker…'
+                  : `Rendering ${update.framesDone}/${update.frameCount} frames on the server…`,
+              );
+            },
+          });
+
+          // A plain link, not a fetch-into-a-Blob: the file is on disk and can be tens
+          // of megabytes, and pulling it into memory to hand straight back is waste.
+          const link = document.createElement('a');
+          link.href = done.url ?? `/api/render/${done.id}/file`;
+          link.download = exportFilename(scene, 'mp4');
+          link.click();
+          setStatus(`${formatBytes(done.bytes ?? 0)} · H.264 yuv420p · rendered server-side`);
         }
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === 'AbortError') setStatus('Cancelled.');
         else if (caught instanceof ExportUnsupportedError) setError(caught.message);
+        else if (caught instanceof RenderJobError) setError(caught.message);
         else setError(caught instanceof Error ? caught.message : 'Export failed.');
       } finally {
         abortRef.current = null;
@@ -113,7 +153,7 @@ export function ExportPanel(props: ExportPanelProps) {
         setProgress(0);
       }
     },
-    [scene, preset],
+    [scene, preset, replayId, slowFinish, interval],
   );
 
   const share = useCallback(async () => {
@@ -187,18 +227,19 @@ export function ExportPanel(props: ExportPanelProps) {
         </button>
 
         {/*
-          SPEC §9: "Offer Download MP4 which routes to Phase 2 when available." Phase 2
-          is M8. Disabled and labelled, rather than silently doing nothing or handing
-          back a WebM wearing an .mp4 name.
+          SPEC §9: "Offer Download MP4 which routes to Phase 2 when available." It is
+          available: the worker renders it with the same renderFrame this canvas uses,
+          so the file is the preview rather than a re-interpretation of it.
         */}
         <button
           type="button"
-          disabled
+          onClick={() => void run('mp4')}
+          disabled={busy}
           data-testid="export-mp4"
-          title="MP4 needs the server render worker (M8), which is not built yet."
-          className="cursor-not-allowed border border-tr-line px-3 py-1.5 text-sm opacity-40"
+          title="Rendered on the server with H.264 + yuv420p, which is what X accepts."
+          className="border border-tr-line bg-tr-panel px-3 py-1.5 text-sm hover:border-tr-up disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Download MP4 — not built yet
+          {job === 'mp4' ? 'Rendering…' : 'Download MP4'}
         </button>
 
         {busy ? (
@@ -252,7 +293,8 @@ export function ExportPanel(props: ExportPanelProps) {
         WebM is {scene.frames.length} frames at {replaySeconds.toFixed(0)}s. GIF is{' '}
         {gifPlan.indices.length} frames at {GIF_FPS}fps, 640px wide
         {gifPlan.indices.length >= GIF_MAX_FRAMES ? ' (frame-capped, so it will look choppy)' : ''}.
-        X does not accept WebM — MP4 arrives with M8.
+        MP4 is rendered on the server as H.264 + yuv420p, which is what X accepts;
+        WebM and GIF are made here in the browser.
       </p>
     </section>
   );

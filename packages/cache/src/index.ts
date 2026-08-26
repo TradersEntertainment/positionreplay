@@ -11,4 +11,5 @@ export * from './schema.js';
 export { createCandleCache, type CandleCacheHandle } from './candles.js';
 export { createFillCache } from './fills.js';
 export { createCsvDocumentStore } from './csvDocuments.js';
+export * from './renderJobs.js';
 export { createCachedSource, cacheUrlFor, type CachedSourceOptions } from './source.node.js';

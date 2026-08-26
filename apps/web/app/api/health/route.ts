@@ -6,11 +6,22 @@
  * healthcheck that fails the deploy for a missing optimisation is worse than useless.
  */
 
-import { cacheAvailable } from '@/lib/data';
+import { cacheAvailable, cacheDatabasePath } from '@/lib/data';
+import { renderJobStore } from '@/lib/render';
 
 export const dynamic = 'force-dynamic';
 
 export function GET(): Response {
   const cache = cacheAvailable();
-  return Response.json({ status: 'ok', cache: cache ? 'ready' : 'unavailable' }, { status: 200 });
+  return Response.json(
+    {
+      status: 'ok',
+      cache: cache ? 'ready' : 'unavailable',
+      // The render worker polls this exact file (SPEC §15). Reported so a worker
+      // pointed at a different one is a one-request diagnosis rather than a mystery.
+      database: cacheDatabasePath(),
+      renderQueue: renderJobStore() ? 'ready' : 'unavailable',
+    },
+    { status: 200 },
+  );
 }

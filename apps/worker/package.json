@@ -1,0 +1,18 @@
+{
+  "name": "@trade-replay/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.6",
+    "@napi-rs/canvas": "^0.1.85",
+    "@trade-replay/adapters": "workspace:*",
+    "@trade-replay/cache": "workspace:*",
+    "@trade-replay/core": "workspace:*",
+    "@trade-replay/renderer": "workspace:*"
+  }
+}

@@ -392,3 +392,107 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${bytes} B`;
 }
+
+/* ------------------------------------------------------- MP4, SPEC §9 Phase 2 */
+
+export interface RenderJobView {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  framesDone: number;
+  frameCount: number;
+  bytes?: number | null;
+  error?: string | null;
+  url?: string;
+}
+
+export class RenderJobError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RenderJobError';
+  }
+}
+
+export interface RequestMp4Options {
+  replayId: string;
+  preset: ExportPreset;
+  slowFinish: boolean;
+  interval?: string;
+  fps?: number;
+  fetchImpl?: typeof fetch;
+}
+
+/** Queue a server render, or pick up the identical one already queued. */
+export async function requestMp4(options: RequestMp4Options): Promise<RenderJobView> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const response = await doFetch('/api/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      replayId: options.replayId,
+      width: options.preset.width,
+      height: options.preset.height,
+      fps: options.fps ?? 30,
+      theme: 'dark',
+      slowFinish: options.slowFinish,
+      ...(options.interval ? { interval: options.interval } : {}),
+    }),
+  });
+
+  const body = (await response.json()) as RenderJobView & { error?: string };
+  if (!response.ok) {
+    throw new RenderJobError(body.error ?? `The server refused the render (${response.status}).`);
+  }
+  return body;
+}
+
+/** How often the browser asks. Fast enough to feel live, slow enough to be free. */
+export const RENDER_POLL_MS = 1500;
+
+/**
+ * Wait for a queued render.
+ *
+ * There is no timeout here on purpose: the job row carries its own give-up rule
+ * (SPEC §15's lease and attempt cap), so a client-side deadline would only ever
+ * disagree with it — and disagreeing means telling someone their render failed while
+ * a worker is still finishing it.
+ */
+export async function awaitMp4(
+  jobId: string,
+  options: {
+    onProgress?: (job: RenderJobView) => void;
+    signal?: AbortSignal;
+    fetchImpl?: typeof fetch;
+    pollMs?: number;
+  } = {},
+): Promise<RenderJobView> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const pollMs = options.pollMs ?? RENDER_POLL_MS;
+
+  for (;;) {
+    // The panel already recognises a DOMException AbortError as "Cancelled";
+    // inventing a second cancellation type would need a second branch there.
+    if (options.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+
+    const response = await doFetch(`/api/render/${jobId}`);
+    const job = (await response.json()) as RenderJobView & { error?: string };
+
+    if (!response.ok) {
+      throw new RenderJobError(job.error ?? `Could not read the render job (${response.status}).`);
+    }
+    options.onProgress?.(job);
+
+    if (job.status === 'done') return job;
+    if (job.status === 'failed') {
+      throw new RenderJobError(job.error ?? 'The render failed on the server.');
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
+/** Fraction complete, or null while the worker has not reported a frame count yet. */
+export function renderProgress(job: RenderJobView): number | null {
+  if (job.status === 'done') return 1;
+  if (job.frameCount <= 0) return null;
+  return Math.min(1, job.framesDone / job.frameCount);
+}
