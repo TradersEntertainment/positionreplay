@@ -28,18 +28,30 @@ const integer = z
  *
  * "Fetch once at boot and cache a `symbol ↔ instrument_id` map. Every other Perps call
  * needs the integer id."
+ *
+ * Only the four fields the adapter actually reads are modelled, and all four are
+ * required: `instrument_id` and `symbol` identify the market, and the two decimal counts
+ * round every price and size that reaches the §5 fold. A wrong or missing one of these
+ * produces a number that looks right, which is exactly what CLAUDE.md's "Zod every
+ * external response" rule exists to prevent.
+ *
+ * The rest of the payload is deliberately not modelled. This schema used to also declare
+ * `category`, `base_asset`, `quote_asset`, `funding_interval`, `max_leverage` and
+ * `isolated_only` — none of which any code path reads. `funding_interval` then came back
+ * from the live endpoint as something other than an integer and failed the parse for all
+ * 67 instruments, so every Polymarket Perps replay died on a field whose value is never
+ * used for anything. Zod passes unknown keys through, so nothing is lost: the whole raw
+ * object is still carried on `Fill.raw`.
+ *
+ * The rule this draws: validate strictly what is read, and do not model what is not.
+ * Declaring a field is a promise to break when it changes, and that promise is only
+ * worth making where breaking is better than being wrong.
  */
 export const PmInstrumentSchema = z.object({
   instrument_id: integer,
   symbol: z.string().min(1),
   quantity_decimals: integer,
   price_decimals: integer,
-  category: z.string().optional(),
-  base_asset: z.string().optional(),
-  quote_asset: z.string().optional(),
-  funding_interval: integer.optional(),
-  max_leverage: numeric.optional(),
-  isolated_only: z.boolean().optional(),
 });
 
 export type PmInstrument = z.infer<typeof PmInstrumentSchema>;
@@ -55,7 +67,18 @@ export const PmInstrumentsSchema = z.union([
  * Max 1000 per request; `more` drives continuation.
  */
 export const PmKlinesSchema = z.object({
-  data: z.array(z.tuple([integer, numeric, numeric, numeric, numeric, numeric, numeric])),
+  /**
+   * The six values a candle is drawn from, and `.rest()` for whatever follows.
+   *
+   * SPEC documents seven columns, the last being a trade count nothing here reads. A
+   * plain seven-element `z.tuple` rejects a row with six or eight, so a venue adding or
+   * dropping a trailing column would take down every replay over a number that is never
+   * drawn — the same way an unread `funding_interval` did on the instruments endpoint.
+   * The six that are read stay required and strictly typed.
+   */
+  data: z.array(
+    z.tuple([integer, numeric, numeric, numeric, numeric, numeric]).rest(z.unknown()),
+  ),
   more: z.boolean().optional(),
 });
 
@@ -68,7 +91,8 @@ export type PmKlines = z.infer<typeof PmKlinesSchema>;
  * sparse: forward-fill before rendering."
  */
 export const PmMarkHistorySchema = z.object({
-  data: z.array(z.tuple([integer, numeric])),
+  /** Bucket and price are read; anything after them is not. See PmKlinesSchema. */
+  data: z.array(z.tuple([integer, numeric]).rest(z.unknown())),
   more: z.boolean().optional(),
 });
 
@@ -93,12 +117,11 @@ export const PmFillSchema = z.object({
   previous_size: numeric,
   previous_entry_price: numeric,
   pnl: numeric.optional(),
-  taker: z.boolean().optional(),
-  fee_asset: z.string().optional(),
   liquidation: z.boolean().optional(),
   adl: z.boolean().optional(),
-  order_id: z.union([z.string(), z.number()]).transform(String).optional(),
-  hash: z.string().optional(),
+  // `taker`, `fee_asset`, `order_id` and `hash` are not modelled, for the same reason
+  // the instrument's decorations are not: no code path reads them, so validating them
+  // can only ever turn a working replay into a failed one. They survive on `Fill.raw`.
 });
 
 export type PmFill = z.infer<typeof PmFillSchema>;

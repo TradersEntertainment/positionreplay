@@ -8,6 +8,7 @@ import {
   mapMarkHistory,
   mapPerpsFill,
 } from './map.js';
+import { PmInstrumentsSchema, PmKlinesSchema, PmMarkHistorySchema } from './schemas.js';
 import type { PmFill, PmInstrument } from './schemas.js';
 
 const BTC: PmInstrument = {
@@ -29,6 +30,92 @@ const base: PmFill = {
   previous_entry_price: 0,
   pnl: 0,
 };
+
+describe('PmInstrumentSchema', () => {
+  /**
+   * The exact key set the live endpoint returned, from the error that took Perps down
+   * in production. Values for the unread keys are stand-ins on purpose: the point is
+   * that this parses whatever they are.
+   */
+  const live = {
+    instrument_id: 7,
+    instrument_type: 'perpetual',
+    category: 'crypto',
+    isolated_only: false,
+    symbol: 'ETH-PERP',
+    base_asset: 'ETH',
+    quote_asset: 'pUSD',
+    funding_interval: '1h',
+    quantity_decimals: 4,
+    price_decimals: 1,
+    price_bounds: { min: '0.1', max: '900000' },
+    liquidation_fee: '0.015',
+    max_order_count: 200,
+    min_notional: '10',
+    max_market_notional: '250000',
+    max_limit_notional: '1000000',
+    max_leverage: '20',
+    risk_tiers: [{ tier: 1, max_notional: '50000' }],
+    ui_live_time: '2026-01-01T00:00:00Z',
+  };
+
+  it('parses the live payload, including keys it does not model', () => {
+    const parsed = PmInstrumentsSchema.parse([live]);
+    expect(parsed[0]).toMatchObject({
+      instrument_id: 7,
+      symbol: 'ETH-PERP',
+      quantity_decimals: 4,
+      price_decimals: 1,
+    });
+  });
+
+  it('does not fail on a field no code path reads', () => {
+    // This is the regression. `funding_interval` was declared as an integer, came back
+    // as something else, and failed the parse for all 67 instruments — so every Perps
+    // replay died over a value that is never used for anything.
+    for (const funding_interval of ['1h', 3.5, null, { seconds: 3600 }, undefined]) {
+      expect(() => PmInstrumentsSchema.parse([{ ...live, funding_interval }])).not.toThrow();
+    }
+  });
+
+  it('still refuses an instrument missing something the fold depends on', () => {
+    // The other half of the rule. These four round every price and size that reaches
+    // §5, so a missing one is a wrong number rather than a missing decoration.
+    for (const key of ['instrument_id', 'symbol', 'quantity_decimals', 'price_decimals']) {
+      const broken: Record<string, unknown> = { ...live };
+      delete broken[key];
+      expect(() => PmInstrumentsSchema.parse([broken]), key).toThrow();
+    }
+  });
+
+  it('refuses a decimal count that is not a whole number', () => {
+    expect(() => PmInstrumentsSchema.parse([{ ...live, price_decimals: 1.5 }])).toThrow();
+  });
+});
+
+describe('the kline and mark-history tuples', () => {
+  const row = [1_762_000_000_000, 92_000, 92_500, 91_800, 92_100, 1_200];
+
+  it('accepts a row with the documented trailing trade count', () => {
+    expect(() => PmKlinesSchema.parse({ data: [[...row, 87]], more: false })).not.toThrow();
+  });
+
+  it('accepts a row with more or fewer trailing columns than documented', () => {
+    // Same lesson as the instruments schema: a strict tuple turns an extra column the
+    // renderer never reads into a dead venue.
+    expect(() => PmKlinesSchema.parse({ data: [row], more: false })).not.toThrow();
+    expect(() => PmKlinesSchema.parse({ data: [[...row, 87, 'x', null]] })).not.toThrow();
+  });
+
+  it('still refuses a row missing a value the candle is drawn from', () => {
+    expect(() => PmKlinesSchema.parse({ data: [row.slice(0, 5)] })).toThrow();
+  });
+
+  it('reads mark history as bucket and price, whatever trails them', () => {
+    const parsed = PmMarkHistorySchema.parse({ data: [[1_762_000_000_000, 92_000, 'extra']] });
+    expect(parsed.data[0]!.slice(0, 2)).toEqual([1_762_000_000_000, 92_000]);
+  });
+});
 
 describe('instrument keys', () => {
   it('uses the integer id, which every other Perps call needs', () => {
