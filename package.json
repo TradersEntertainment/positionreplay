@@ -14,6 +14,7 @@
     "capture:binance": "tsx scripts/capture-binance.ts",
     "episodes": "tsx apps/cli/src/episodes.ts",
     "lint": "eslint .",
+    "probe:venue": "tsx scripts/probe-venue.ts",
     "render:still": "tsx apps/cli/src/render-still.ts",
     "worker": "tsx apps/worker/src/index.ts",
     "test": "vitest run",
