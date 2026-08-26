@@ -47,16 +47,58 @@ export function drawHud(ctx: Canvas2D, c: LayerContext): void {
   drawNotices(ctx, c);
 }
 
+/**
+ * A short inverse-video label: solid block, background-coloured glyphs.
+ *
+ * The same vocabulary the PnL flash uses, which is what SPEC §7.3 leaves once gradients
+ * and shadows are out — and it is legible at thumbnail size, which a coloured outline
+ * is not.
+ */
+function drawTag(ctx: Canvas2D, c: LayerContext, label: string, x: number, y: number): void {
+  const { unit } = c.metrics;
+  const tagFont = font(c.theme, unit * 1.6, 'bold');
+
+  ctx.save();
+  ctx.font = tagFont;
+  const width = ctx.measureText(label).width;
+  const padX = unit * 0.7;
+  const height = unit * 2.6;
+  ctx.fillStyle = c.theme.notice;
+  ctx.fillRect(x, y, width + padX * 2, height);
+  ctx.restore();
+
+  text(ctx, label, x + padX, y + height / 2, {
+    color: c.theme.background,
+    font: tagFont,
+    baseline: 'middle',
+  });
+}
+
 function drawIdentity(ctx: Canvas2D, c: LayerContext): void {
   const { theme, metrics, episode, frame, layout } = c;
   const { unit, hud } = metrics;
   const x = metrics.plot.x0;
 
+  const titleFont = font(theme, unit * 3.2, 'bold');
   text(ctx, episode.displayName, x, hud.top, {
     color: theme.hudText,
-    font: font(theme, unit * 3.2, 'bold'),
+    font: titleFont,
     baseline: 'top',
   });
+
+  // A position that was typed, not traded, says so beside its own name.
+  //
+  // It is drawn here rather than added to `notices` on purpose: notices are capped by
+  // the space below the stats bar and the overflow is summarised as "(+2 more)", so a
+  // busy replay could push this one off the image. Everything else that can be crowded
+  // out is a caveat about the numbers; this one is about whether the trade happened.
+  if (layout.constructed === true) {
+    ctx.save();
+    ctx.font = titleFont;
+    const nameWidth = ctx.measureText(episode.displayName).width;
+    ctx.restore();
+    drawTag(ctx, c, 'CONSTRUCTED', x + nameWidth + unit * 1.5, hud.top + unit * 0.6);
+  }
 
   const identity = [
     layout.address ? shortAddress(layout.address) : null,
@@ -222,7 +264,12 @@ function drawStatsBar(ctx: Canvas2D, c: LayerContext): void {
   const cells: [string, string, string][] = [
     ['BOUGHT', usd(frame.bought), theme.hudText],
     ['SOLD', usd(frame.sold), theme.hudText],
-    ['FEES', usd(frame.fees), theme.hudText],
+    // Unknown is not zero, for the same reason funding is not. A manual position paid
+    // nothing because it was never placed; what it *would* have cost is not something
+    // this app can state.
+    c.layout.feesUnavailable === true
+      ? ['FEES', '—', theme.hudDim]
+      : ['FEES', usd(frame.fees), theme.hudText],
     fundingUnavailable
       ? ['FUNDING', '—', theme.hudDim]
       : [

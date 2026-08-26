@@ -30,12 +30,13 @@ import type {
   AdapterInput,
   AdapterWarning,
   CachedCandle,
+  InstrumentListing,
   SeriesRequest,
 } from '../types.js';
 import { InvalidInputError, SeriesUnavailableError } from '../types.js';
 import { PM_WEIGHTS, createPerpsClient } from './client.js';
 import { loadInstruments } from './instruments.js';
-import { instrumentIdFor, mapKlines, mapMarkHistory, mapPerpsFill } from './map.js';
+import { instrumentIdFor, instrumentKeyFor, mapKlines, mapMarkHistory, mapPerpsFill } from './map.js';
 import {
   PmFillHistorySchema,
   PmKlinesSchema,
@@ -345,10 +346,30 @@ async function fetchSeries(req: SeriesRequest, ctx?: AdapterContext): Promise<Pr
  * from the rate would be an estimate presented where a fact is expected, so the HUD
  * shows funding as unavailable instead (CLAUDE.md, no fabricated numbers).
  */
+/**
+ * Every market the venue lists, for the manual position builder.
+ *
+ * The instrument map is already fetched and cached for the fill path (§4.4.2: "Fetch
+ * once at boot and cache a `symbol ↔ instrument_id` map"), so this costs nothing beyond
+ * shaping it. Sorted by symbol because a picker with 67 entries in the venue's internal
+ * id order is not a picker anyone can use.
+ */
+async function listInstruments(ctx?: AdapterContext): Promise<InstrumentListing[]> {
+  const instruments = await loadInstruments(ctx);
+
+  return [...instruments.byId.values()]
+    .map((instrument) => {
+      const { instrument: key, displayName } = instrumentKeyFor(instrument);
+      return { instrument: key, displayName };
+    })
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
 export const polymarketPerpsAdapter: Adapter = {
   id: 'polymarket-perps',
   intervals: PM_INTERVALS,
   parseInput,
   fetchFills,
   fetchSeries,
+  listInstruments,
 };

@@ -133,6 +133,15 @@ export default async function Home({
       </ul>
 
       <p className="mt-8 text-sm text-tr-dim">
+        …or{' '}
+        <Link href="/build" className="underline hover:text-tr-text" data-testid="build-link">
+          build a position by hand
+        </Link>{' '}
+        — pick a market, type the entries and exits, and watch it play against the real
+        chart.
+      </p>
+
+      <p className="mt-4 text-sm text-tr-dim">
         Try{' '}
         <Link href={`/a/hyperliquid/${EXAMPLE}`} className="underline hover:text-tr-text">
           {EXAMPLE}

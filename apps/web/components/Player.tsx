@@ -54,6 +54,15 @@ export interface PlayerProps {
   notices: string[];
   /** The venue cannot report funding for this account; the HUD shows a dash. */
   fundingUnavailable?: boolean;
+  /**
+   * Present when this position was typed rather than traded.
+   *
+   * Two consequences. The canvas carries a CONSTRUCTED tag and shows fees as
+   * unavailable — a hypothetical paid nothing, but a real trade would have. And the
+   * interval override refetches by spec: there is no account to look the fills up from,
+   * so `?replayId=` would find nothing.
+   */
+  manualSpec?: string;
 }
 
 function seriesLength(series: PriceSeries): number {
@@ -130,6 +139,7 @@ export function Player(props: PlayerProps) {
         interval,
         ...(notices.length > 0 ? { notices } : {}),
         ...(props.fundingUnavailable ? { fundingUnavailable: true } : {}),
+        ...(props.manualSpec ? { constructed: true, feesUnavailable: true } : {}),
       });
 
       if (readoutRef.current) {
@@ -139,7 +149,15 @@ export function Player(props: PlayerProps) {
         scrubRef.current.value = String(index);
       }
     },
-    [frames, renderer, interval, notices, props.address, props.fundingUnavailable],
+    [
+      frames,
+      renderer,
+      interval,
+      notices,
+      props.address,
+      props.fundingUnavailable,
+      props.manualSpec,
+    ],
   );
 
   /** Match the backing store to the element's real size, in device pixels. */
@@ -339,9 +357,10 @@ export function Player(props: PlayerProps) {
     async (next: string) => {
       setLoadingInterval(true);
       try {
-        const response = await fetch(
-          `/api/replay?replayId=${encodeURIComponent(props.replayId)}&interval=${encodeURIComponent(next)}`,
-        );
+        const source = props.manualSpec
+          ? `manual=${encodeURIComponent(props.manualSpec)}`
+          : `replayId=${encodeURIComponent(props.replayId)}`;
+        const response = await fetch(`/api/replay?${source}&interval=${encodeURIComponent(next)}`);
         if (!response.ok) return;
         const data = (await response.json()) as { series: PriceSeries; interval: string };
         setIntervalName(data.interval);
@@ -350,7 +369,7 @@ export function Player(props: PlayerProps) {
         setLoadingInterval(false);
       }
     },
-    [props.replayId],
+    [props.replayId, props.manualSpec],
   );
 
   // SPEC §8: "Scrubber shows fill markers as ticks along the track."
@@ -477,10 +496,19 @@ export function Player(props: PlayerProps) {
 
       {finalFrame ? (
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 border border-tr-line p-3 text-xs sm:grid-cols-4">
-          <Stat label="ADDRESS" value={shortAddress(props.address)} />
+          {/* A constructed position has no account, and a labelled empty cell reads as
+              a value that failed to load rather than as one that does not exist. */}
+          {props.address ? (
+            <Stat label="ADDRESS" value={shortAddress(props.address)} />
+          ) : null}
           <Stat label="BOUGHT" value={formatUsd(finalFrame.bought)} />
           <Stat label="SOLD" value={formatUsd(finalFrame.sold)} />
-          <Stat label="FEES" value={formatUsd(episode.totalFees)} />
+          {/* Same rule the canvas follows: nothing was paid, but a real trade would
+              have, so the cost of this trade is unknown rather than zero. */}
+          <Stat
+            label="FEES"
+            value={props.manualSpec ? '—' : formatUsd(episode.totalFees)}
+          />
         </dl>
       ) : null}
 

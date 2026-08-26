@@ -47,6 +47,14 @@ export interface ExportPanelProps {
   replayId: string;
   /** SPEC §6.3's climax easing, so the MP4 matches what the player just played. */
   slowFinish?: boolean;
+  /**
+   * Present when the position was typed rather than traded.
+   *
+   * This is the export path, which is exactly where it matters: an MP4 of a constructed
+   * position is indistinguishable from one of a real trade unless the label is in the
+   * pixels (CLAUDE.md).
+   */
+  manualSpec?: string;
 }
 
 export function ExportPanel(props: ExportPanelProps) {
@@ -69,8 +77,9 @@ export function ExportPanel(props: ExportPanelProps) {
       // audio object is how a paused player ends up playing over an export.
       score: composeScore(frames, computeEnergyTrack(frames), episode),
       ...(fundingUnavailable ? { fundingUnavailable: true } : {}),
+      ...(props.manualSpec ? { constructed: true, feesUnavailable: true } : {}),
     };
-  }, [episode, series, address, interval, notices, fundingUnavailable]);
+  }, [episode, series, address, interval, notices, fundingUnavailable, props.manualSpec]);
 
   const [preset, setPreset] = useState<ExportPreset>(EXPORT_PRESETS[0]!);
   const [job, setJob] = useState<Job>(null);

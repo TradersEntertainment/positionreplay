@@ -550,6 +550,57 @@ describe('renderFrame — notices stay readable', () => {
     expect(notice!.length * 6).toBeLessThanOrEqual(LAYOUT.width);
   });
 
+  it('marks a constructed position in the image, beside its own name', () => {
+    // CLAUDE.md: exports get "posted as fact". A typed position is indistinguishable
+    // from a traded one once it is an MP4, so the label has to be in the pixels.
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      constructed: true,
+    });
+
+    expect(texts(calls)).toContain('CONSTRUCTED');
+  });
+
+  it('does not mark an ordinary replay as constructed', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    expect(texts(calls)).not.toContain('CONSTRUCTED');
+  });
+
+  it('keeps the constructed tag even when notices are overflowing', () => {
+    // The reason it is not just another notice: notices are capped by the space below
+    // the stats bar and the overflow becomes "(+N more)". Everything that can be
+    // crowded out is a caveat about the numbers; this one is about whether the trade
+    // happened at all.
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      constructed: true,
+      notices: Array.from({ length: 12 }, (_, i) => `notice ${i}`),
+    });
+
+    expect(texts(calls)).toContain('CONSTRUCTED');
+  });
+
+  it('shows fees as unavailable rather than as zero when they are unknowable', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      feesUnavailable: true,
+    });
+
+    const drawn = texts(calls);
+    expect(drawn).toContain('FEES');
+    // A dash, not $0.00 — zero is a claim about what the trade would have cost.
+    expect(drawn.filter((t) => t === '—').length).toBeGreaterThan(0);
+  });
+
   it('leaves a short notice untouched', () => {
     const { episode, series, frames } = scenario();
     const { ctx, calls } = recordingContext();

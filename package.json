@@ -27,7 +27,8 @@
     "verify:m6": "tsx scripts/verify-m6.ts",
     "verify:m7": "tsx scripts/verify-m7.ts",
     "verify:m8": "tsx scripts/verify-m8.ts",
-    "verify:sound": "tsx scripts/verify-sound.ts"
+    "verify:sound": "tsx scripts/verify-sound.ts",
+    "verify:build": "tsx scripts/verify-build.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

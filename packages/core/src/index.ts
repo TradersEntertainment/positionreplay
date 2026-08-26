@@ -10,3 +10,4 @@ export * from './episodes.js';
 export * from './timeline.js';
 export * from './playback.js';
 export * from './replayId.js';
+export * from './manual.js';

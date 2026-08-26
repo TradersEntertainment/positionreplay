@@ -5,19 +5,25 @@
  * client needs data the server component did not already hand it.
  */
 
-import { ReplayNotFoundError, loadReplay } from '@/lib/data';
+import { ReplayNotFoundError, loadManualReplay, loadReplay } from '@/lib/data';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
+  const interval = params.get('interval') ?? undefined;
+  // A constructed position has no account to look fills up from, so it is addressed by
+  // its own spec rather than by a replay id.
+  const manual = params.get('manual');
   const replayId = params.get('replayId');
-  if (!replayId) {
-    return Response.json({ error: 'Missing ?replayId' }, { status: 400 });
+  if (!manual && !replayId) {
+    return Response.json({ error: 'Missing ?replayId or ?manual' }, { status: 400 });
   }
 
   try {
-    return Response.json(await loadReplay(replayId, params.get('interval') ?? undefined));
+    return Response.json(
+      manual ? await loadManualReplay(manual, interval) : await loadReplay(replayId!, interval),
+    );
   } catch (error) {
     if (error instanceof ReplayNotFoundError) {
       return Response.json({ error: error.message }, { status: 404 });

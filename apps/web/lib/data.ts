@@ -9,8 +9,20 @@
  * and §12), and building it now would be scaffolding a milestone that has not started.
  */
 
-import { VENUE_LIMITATIONS, adapterFor, limitationText } from '@trade-replay/adapters';
-import type { Adapter, AdapterWarning, VenueLimitation } from '@trade-replay/adapters';
+import {
+  SUPPORTED_VENUES,
+  VENUE_LABELS,
+  VENUE_LIMITATIONS,
+  adapterFor,
+  isSupportedVenue,
+  limitationText,
+} from '@trade-replay/adapters';
+import type {
+  Adapter,
+  AdapterWarning,
+  InstrumentListing,
+  VenueLimitation,
+} from '@trade-replay/adapters';
 import { createSource, fixtureFromEnv, findWorkspaceRoot } from '@trade-replay/adapters/source';
 import type { SourceCache } from '@trade-replay/adapters/source';
 import {
@@ -24,8 +36,10 @@ import {
 import type { CsvDocumentStore } from '@trade-replay/adapters';
 import {
   buildEpisodes,
+  decodeManualSpec,
   decodeReplayId,
   findEpisodeByRef,
+  manualFills,
   pickInterval,
   replayIdForEpisode,
   seriesRangeFor,
@@ -160,6 +174,14 @@ export interface EpisodesResult {
 
 export interface ReplayResult {
   replayId: string;
+  /**
+   * The encoded manual spec, when this replay was typed rather than traded.
+   *
+   * Present means the position is a construction: the candles are the venue's, the
+   * position is not anyone's. Drives the CONSTRUCTED tag in the image and tells the
+   * player which query parameter to refetch a series with.
+   */
+  manualSpec?: string;
   venue: VenueId;
   address: string;
   label: string;
@@ -331,6 +353,111 @@ export async function loadEpisodes(venue: VenueId, address: string): Promise<Epi
 }
 
 export class ReplayNotFoundError extends Error {}
+
+/**
+ * A position someone typed, replayed against the venue's real candles.
+ *
+ * Everything downstream of the fills is the ordinary path — `buildEpisodes`, the same
+ * interval picking, the same series fetch — so a constructed replay behaves exactly
+ * like a real one and cannot drift from it. What differs is upstream (the fills are
+ * built from the spec, not fetched) and in how it is presented: the image carries a
+ * CONSTRUCTED tag, and fees are shown as unavailable rather than as the zero the fills
+ * literally carry.
+ */
+export async function loadManualReplay(
+  encodedSpec: string,
+  intervalOverride?: string,
+): Promise<ReplayResult> {
+  const spec = decodeManualSpec(encodedSpec);
+  if (!spec) throw new ReplayNotFoundError('That constructed-position link is not valid.');
+  if (!isSupportedVenue(spec.venue)) {
+    throw new ReplayNotFoundError(`No adapter for venue "${spec.venue}".`);
+  }
+
+  const adapter = adapterFor(spec.venue);
+  const source = createSource(fixtureFromEnv(), {
+    venue: spec.venue,
+    cache: cache(),
+    csvStore: csvStore(),
+  });
+
+  const episodes = buildEpisodes(manualFills(spec), { venue: spec.venue });
+  const episode = episodes[0];
+  if (!episode) throw new ReplayNotFoundError('Those entries do not make a position.');
+
+  const now = Date.now();
+  const range = seriesRangeFor(episode, now);
+  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, adapter.intervals, {
+    ...(intervalOverride ? { override: intervalOverride } : {}),
+  });
+
+  const series = await adapter.fetchSeries(
+    { instrument: episode.instrument, interval: picked.interval, from: range.from, to: range.to },
+    source.ctx,
+  );
+
+  const notices = [
+    'CONSTRUCTED POSITION — entered by hand, not a trade anyone made',
+    // More than one episode means the legs flip the position, which is legitimate but
+    // means the page is showing the first of several — say so rather than hide it.
+    ...(episodes.length > 1
+      ? [`These entries make ${episodes.length} positions; this is the first.`]
+      : []),
+    ...source.warnings.map((w) => w.message),
+    ...(picked.warning ? [picked.warning] : []),
+    ...(source.provenanceWarning ? ['SYNTHETIC DATA — not a real position'] : []),
+  ];
+
+  return {
+    replayId: encodedSpec,
+    manualSpec: encodedSpec,
+    venue: spec.venue,
+    // There is no account behind this. An empty string rather than a plausible-looking
+    // wallet: the HUD omits the address entirely instead of naming someone.
+    address: '',
+    label: source.label,
+    fundingUnavailable: true,
+    episode: stripRaw(episode),
+    series,
+    interval: picked.interval,
+    barCount: series.kind === 'ohlcv' ? series.candles.length : series.points.length,
+    availableIntervals: adapter.intervals.map((i) => i.name),
+    warnings: source.warnings,
+    notices,
+    ...(source.provenanceWarning ? { provenanceWarning: source.provenanceWarning } : {}),
+  };
+}
+
+/**
+ * Venues the position builder can offer.
+ *
+ * Derived from the adapters, not written down: a venue whose picker cannot be populated
+ * is not a choice, and one added later appears here without anyone remembering to.
+ */
+export function buildableVenues(): { id: string; label: string }[] {
+  return SUPPORTED_VENUES.filter((venue) => adapterFor(venue).listInstruments !== undefined).map(
+    (venue) => ({ id: venue, label: VENUE_LABELS[venue] ?? venue }),
+  );
+}
+
+/**
+ * Every instrument a venue lists, for the builder's picker.
+ *
+ * Empty for a venue whose adapter cannot answer — the CSV adapter's instruments come
+ * from an uploaded file, so there is no list to fetch.
+ */
+export async function loadInstrumentList(venue: string): Promise<InstrumentListing[]> {
+  if (!isSupportedVenue(venue)) return [];
+  const adapter = adapterFor(venue);
+  if (!adapter.listInstruments) return [];
+
+  const source = createSource(fixtureFromEnv(), {
+    venue,
+    cache: cache(),
+    csvStore: csvStore(),
+  });
+  return adapter.listInstruments(source.ctx);
+}
 
 export async function loadReplay(
   replayId: string,

@@ -199,6 +199,31 @@ touched for those symbols at all.
 
 Funding shows `—`: a trades file carries no funding payments, so there are none to read.
 
+## Build a position by hand
+
+`/build` — pick a market from the venue's own instrument list, type the entries and exits
+with their dates, and replay it against the venue's real candles. The chart is the
+market's; the position is a construction.
+
+The whole spec is encoded into the URL, so a link is the position and nothing is stored
+behind it.
+
+Because these get exported and posted, a constructed replay says so where it cannot be
+cropped out:
+
+- `CONSTRUCTED` is drawn into the canvas beside the instrument name — in the pixels, not
+  only on the page, so it survives becoming an MP4. It is not one of the `notices`,
+  which are capped by the space below the stats bar and summarised as "(+N more)":
+  everything that can be crowded out is a caveat about the numbers, and this one is about
+  whether the trade happened.
+- **Fees read `—`, not `$0.00`.** Nothing was paid, but a real trade would have paid
+  something, and a confident zero is a claim about what this trade would have cost. Same
+  rule as leverage and Perps funding.
+- No address is shown, because there is no account.
+
+`pnpm verify:build` drives the whole flow in a browser and checks the colour of the tag
+in the canvas pixels, not just the text on the page.
+
 ## Polymarket Perps: the address, and what it cannot show
 
 This was built as SPEC §4.4.1's **option A** — open positions only, via

@@ -96,6 +96,10 @@ export interface ExportScene {
   notices: string[];
   /** Carried into the export too — an unknown funding figure must not export as zero. */
   fundingUnavailable?: boolean;
+  /** Fees are unknowable on this replay; the HUD must not export "$0.00". */
+  feesUnavailable?: boolean;
+  /** The position was typed, not traded. Stamped into the exported image. */
+  constructed?: boolean;
   /**
    * The soundtrack, from `composeScore`.
    *
@@ -122,6 +126,8 @@ function layoutFor(scene: ExportScene, width: number, height: number) {
     interval: scene.interval,
     ...(scene.notices.length > 0 ? { notices: scene.notices } : {}),
     ...(scene.fundingUnavailable ? { fundingUnavailable: true } : {}),
+    ...(scene.feesUnavailable ? { feesUnavailable: true } : {}),
+    ...(scene.constructed ? { constructed: true } : {}),
   };
 }
 

@@ -107,6 +107,23 @@ export interface RenderLayout {
    * paid, so the HUD shows it as unavailable instead — same rule as leverage.
    */
   fundingUnavailable?: boolean;
+  /**
+   * The fees on this replay are not knowable.
+   *
+   * True for a manually constructed position: nothing was actually paid, so the fills
+   * carry zero — but a real trade would have paid something, and "FEES $0.00" is a
+   * claim about what this trade would have cost. Same rule as leverage and Perps
+   * funding (CLAUDE.md): unavailable, not invented.
+   */
+  feesUnavailable?: boolean;
+  /**
+   * This position was typed, not traded.
+   *
+   * Drawn into the image itself rather than only onto the page around it, because the
+   * image is what gets posted, and a constructed replay is indistinguishable from a
+   * real one once it is an MP4.
+   */
+  constructed?: boolean;
   /** SPEC §7.2: (b) growing domain is the default, (a) fixed is the option. */
   xMode?: 'growing' | 'fixed';
   /**

@@ -238,6 +238,35 @@ describe('the previous_size oracle', () => {
   });
 });
 
+describe('listInstruments', () => {
+  it('lists every market the venue serves', async () => {
+    const listed = await polymarketPerpsAdapter.listInstruments!(ctx());
+
+    expect(listed.length).toBeGreaterThanOrEqual(3);
+    expect(listed.map((i) => i.displayName)).toContain('BTC-PERP');
+  });
+
+  it('returns the instrument key fetchSeries actually takes', async () => {
+    // A picker that hands back a display name would produce a replay that 404s at the
+    // venue. Round-tripping one entry through fetchSeries is the only way to know.
+    const listed = await polymarketPerpsAdapter.listInstruments!(ctx());
+    const btc = listed.find((i) => i.displayName === 'BTC-PERP')!;
+
+    expect(btc.instrument).toMatch(/^pm:\d+$/);
+    await expect(
+      polymarketPerpsAdapter.fetchSeries(
+        { instrument: btc.instrument, interval: '1h', from: 0, to: Number.MAX_SAFE_INTEGER },
+        ctx(),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it('is sorted by name, because 67 markets in id order is not a picker', async () => {
+    const names = (await polymarketPerpsAdapter.listInstruments!(ctx())).map((i) => i.displayName);
+    expect([...names].sort((a, b) => a.localeCompare(b))).toEqual(names);
+  });
+});
+
 describe('fetchSeries', () => {
   it('serves klines for a normal interval', async () => {
     const series = await polymarketPerpsAdapter.fetchSeries(

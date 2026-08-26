@@ -246,6 +246,24 @@ export interface Adapter {
     range: TimeRange,
     ctx?: AdapterContext,
   ): Promise<FundingEvent[]>;
+
+  /**
+   * Optional: every instrument this venue lists.
+   *
+   * For choosing a market without an account — the manual position builder, where
+   * someone picks a symbol and types entries and exits against the venue's real
+   * candles. Optional because not every venue can answer it: the CSV adapter's
+   * instruments come from an uploaded file, so there is no list to fetch.
+   */
+  listInstruments?(ctx?: AdapterContext): Promise<InstrumentListing[]>;
+}
+
+/** One tradable market, as little as a picker needs. */
+export interface InstrumentListing {
+  /** The adapter's own instrument key, the one `fetchSeries` takes. */
+  instrument: string;
+  /** What a human calls it. */
+  displayName: string;
 }
 
 /** Thrown when a venue responds with a non-2xx status. */
