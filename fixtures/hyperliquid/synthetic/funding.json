@@ -1,0 +1,398 @@
+[
+  {
+    "time": 1761955200000,
+    "hash": "0xfund000000hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.262977",
+      "szi": "1000.0000",
+      "fundingRate": "-0.0000175318"
+    }
+  },
+  {
+    "time": 1761984000000,
+    "hash": "0xfund000001hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.232825",
+      "szi": "1000.0000",
+      "fundingRate": "-0.0000155217"
+    }
+  },
+  {
+    "time": 1762012800000,
+    "hash": "0xfund000002hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.316145",
+      "szi": "1000.0000",
+      "fundingRate": "0.0000210763"
+    }
+  },
+  {
+    "time": 1762041600000,
+    "hash": "0xfund000003hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.224126",
+      "szi": "1500.0000",
+      "fundingRate": "0.0000099611"
+    }
+  },
+  {
+    "time": 1762063200000,
+    "hash": "0xfund000000btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "0.487312",
+      "szi": "0.5000",
+      "fundingRate": "-0.0000103683"
+    }
+  },
+  {
+    "time": 1762070400000,
+    "hash": "0xfund000004hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.064301",
+      "szi": "1500.0000",
+      "fundingRate": "0.0000028578"
+    }
+  },
+  {
+    "time": 1762092000000,
+    "hash": "0xfund000001btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "0.575924",
+      "szi": "0.5000",
+      "fundingRate": "-0.0000122537"
+    }
+  },
+  {
+    "time": 1762099200000,
+    "hash": "0xfund000005hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.040030",
+      "szi": "1500.0000",
+      "fundingRate": "-0.0000017791"
+    }
+  },
+  {
+    "time": 1762120800000,
+    "hash": "0xfund000002btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "0.555269",
+      "szi": "0.5000",
+      "fundingRate": "-0.0000118142"
+    }
+  },
+  {
+    "time": 1762128000000,
+    "hash": "0xfund000006hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.014609",
+      "szi": "1500.0000",
+      "fundingRate": "0.0000006493"
+    }
+  },
+  {
+    "time": 1762149600000,
+    "hash": "0xfund000003btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "0.299012",
+      "szi": "0.5000",
+      "fundingRate": "-0.0000063620"
+    }
+  },
+  {
+    "time": 1762156800000,
+    "hash": "0xfund000007hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.113440",
+      "szi": "900.0000",
+      "fundingRate": "-0.0000084030"
+    }
+  },
+  {
+    "time": 1762178400000,
+    "hash": "0xfund000004btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.184055",
+      "szi": "0.5000",
+      "fundingRate": "0.0000039161"
+    }
+  },
+  {
+    "time": 1762185600000,
+    "hash": "0xfund000008hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.055796",
+      "szi": "900.0000",
+      "fundingRate": "0.0000041330"
+    }
+  },
+  {
+    "time": 1762207200000,
+    "hash": "0xfund000005btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.586323",
+      "szi": "0.5000",
+      "fundingRate": "0.0000124749"
+    }
+  },
+  {
+    "time": 1762214400000,
+    "hash": "0xfund000009hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.151104",
+      "szi": "900.0000",
+      "fundingRate": "0.0000111929"
+    }
+  },
+  {
+    "time": 1762236000000,
+    "hash": "0xfund000006btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "0.705906",
+      "szi": "0.5000",
+      "fundingRate": "-0.0000150193"
+    }
+  },
+  {
+    "time": 1762243200000,
+    "hash": "0xfund000010hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.103780",
+      "szi": "900.0000",
+      "fundingRate": "-0.0000076874"
+    }
+  },
+  {
+    "time": 1762264800000,
+    "hash": "0xfund000007btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.870329",
+      "szi": "0.5000",
+      "fundingRate": "0.0000185176"
+    }
+  },
+  {
+    "time": 1762272000000,
+    "hash": "0xfund000011hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.158788",
+      "szi": "900.0000",
+      "fundingRate": "-0.0000117621"
+    }
+  },
+  {
+    "time": 1762293600000,
+    "hash": "0xfund000008btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.194976",
+      "szi": "0.5000",
+      "fundingRate": "0.0000041484"
+    }
+  },
+  {
+    "time": 1762322400000,
+    "hash": "0xfund000009btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.322655",
+      "szi": "0.5000",
+      "fundingRate": "0.0000068650"
+    }
+  },
+  {
+    "time": 1762351200000,
+    "hash": "0xfund000010btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.432571",
+      "szi": "0.5000",
+      "fundingRate": "0.0000092036"
+    }
+  },
+  {
+    "time": 1762380000000,
+    "hash": "0xfund000011btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.970061",
+      "szi": "0.5000",
+      "fundingRate": "0.0000206396"
+    }
+  },
+  {
+    "time": 1762387200000,
+    "hash": "0xfund000012hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.150763",
+      "szi": "-800.0000",
+      "fundingRate": "0.0000125636"
+    }
+  },
+  {
+    "time": 1762408800000,
+    "hash": "0xfund000012btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.327836",
+      "szi": "0.5000",
+      "fundingRate": "0.0000069752"
+    }
+  },
+  {
+    "time": 1762416000000,
+    "hash": "0xfund000013hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.032833",
+      "szi": "-800.0000",
+      "fundingRate": "0.0000027361"
+    }
+  },
+  {
+    "time": 1762437600000,
+    "hash": "0xfund000013btc",
+    "delta": {
+      "type": "funding",
+      "coin": "BTC",
+      "usdc": "-0.885865",
+      "szi": "0.5000",
+      "fundingRate": "0.0000188482"
+    }
+  },
+  {
+    "time": 1762444800000,
+    "hash": "0xfund000014hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.121374",
+      "szi": "-800.0000",
+      "fundingRate": "-0.0000101145"
+    }
+  },
+  {
+    "time": 1762473600000,
+    "hash": "0xfund000015hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.039380",
+      "szi": "-800.0000",
+      "fundingRate": "-0.0000032817"
+    }
+  },
+  {
+    "time": 1762502400000,
+    "hash": "0xfund000016hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.075241",
+      "szi": "-800.0000",
+      "fundingRate": "-0.0000062701"
+    }
+  },
+  {
+    "time": 1762531200000,
+    "hash": "0xfund000017hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.020337",
+      "szi": "400.0000",
+      "fundingRate": "0.0000033896"
+    }
+  },
+  {
+    "time": 1762560000000,
+    "hash": "0xfund000018hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.036881",
+      "szi": "400.0000",
+      "fundingRate": "-0.0000061468"
+    }
+  },
+  {
+    "time": 1762588800000,
+    "hash": "0xfund000019hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.126707",
+      "szi": "400.0000",
+      "fundingRate": "0.0000211178"
+    }
+  },
+  {
+    "time": 1762617600000,
+    "hash": "0xfund000020hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "0.048592",
+      "szi": "400.0000",
+      "fundingRate": "-0.0000080987"
+    }
+  },
+  {
+    "time": 1762646400000,
+    "hash": "0xfund000021hype",
+    "delta": {
+      "type": "funding",
+      "coin": "HYPE",
+      "usdc": "-0.102667",
+      "szi": "400.0000",
+      "fundingRate": "0.0000171112"
+    }
+  }
+]

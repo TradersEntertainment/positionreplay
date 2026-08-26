@@ -1,0 +1,17 @@
+{
+  "name": "@trade-replay/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./hyperliquid": "./src/hyperliquid/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@trade-replay/core": "workspace:*",
+    "zod": "^4.1.13"
+  }
+}
