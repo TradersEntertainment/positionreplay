@@ -112,10 +112,20 @@ that directory, and says so in a comment.
 ### Variables
 ```
 RENDER_TRANSPORT=http
-RENDER_WORKER_TOKEN=<the same value as web>
-WEB_URL=http://<web-service>.railway.internal:8080
+RENDER_WORKER_TOKEN=paste-the-same-value-web-has
+WEB_URL=http://web.railway.internal:8080
 NODE_ENV=production
 ```
+
+**Both of those are examples — substitute real values.** `WEB_URL` takes the web
+service's private domain, which Railway shows under its Networking settings, and the
+token is whatever you generated for `web`. The worker refuses to start on a value that
+still looks like a placeholder, because pasting one through surfaces much later as
+`Cannot convert argument to a ByteString ...`, which is the truth (HTTP headers are
+ASCII, and Turkish `ğ` is not) and no help at all.
+
+Keep the token ASCII: letters, digits and punctuation. It travels in an
+`Authorization` header, which cannot carry anything else.
 
 Use Railway **shared variables** for `RENDER_WORKER_TOKEN` so the two cannot drift
 (SPEC §15). `WEB_URL` should be the private network address — the worker has no reason

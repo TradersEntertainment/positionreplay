@@ -50,6 +50,31 @@ function intFromEnv(name: string, fallback: number): number {
   return Math.floor(value);
 }
 
+/**
+ * Reject a value that is still the placeholder from the deploy guide.
+ *
+ * Pasting `<web ile AYNI değer>` into a token surfaces 2000 polls later as "Cannot
+ * convert argument to a ByteString because the character at index 23 has a value of
+ * 287" — technically the truth (HTTP headers are ASCII, and that is the `ğ`) and
+ * useless to anyone trying to fix it. The angle brackets are the giveaway, and a
+ * non-ASCII byte is worth naming on its own since it cannot go in a header at all.
+ */
+function requireRealValue(name: string, value: string): void {
+  if (/[<>]/.test(value)) {
+    throw new Error(
+      `${name} is still a placeholder: "${value}". Replace it with the real value — ` +
+        `see docs/DEPLOY-RAILWAY.md.`,
+    );
+  }
+  const offender = [...value].findIndex((c) => c.charCodeAt(0) > 127);
+  if (offender !== -1) {
+    throw new Error(
+      `${name} contains a non-ASCII character ("${value[offender]}" at position ${offender}), ` +
+        `which cannot be sent in an HTTP header. Use letters, digits and punctuation only.`,
+    );
+  }
+}
+
 export function loadConfig(): WorkerConfig {
   const token = process.env['RENDER_WORKER_TOKEN'];
   const transport = process.env['RENDER_TRANSPORT'];
@@ -57,7 +82,7 @@ export function loadConfig(): WorkerConfig {
     throw new Error(`RENDER_TRANSPORT must be "sqlite" or "http", got "${transport}".`);
   }
 
-  return {
+  const config: WorkerConfig = {
     // Defaulting to http when a token is present: on Railway the token is the thing
     // that has to be configured anyway, and a worker that quietly opened a local
     // SQLite file there would poll a database nothing else writes to.
@@ -71,4 +96,16 @@ export function loadConfig(): WorkerConfig {
     workerId: process.env['WORKER_ID'] ?? `${hostname()}:${process.pid}`,
     maxFrames: intFromEnv('RENDER_MAX_FRAMES', 3000),
   };
+
+  if (config.transport === 'http') {
+    requireRealValue('WEB_URL', config.webUrl);
+    if (config.workerToken !== undefined) requireRealValue('RENDER_WORKER_TOKEN', config.workerToken);
+    try {
+      new URL(config.webUrl);
+    } catch {
+      throw new Error(`WEB_URL is not a URL: "${config.webUrl}".`);
+    }
+  }
+
+  return config;
 }
