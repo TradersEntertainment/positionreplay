@@ -10,7 +10,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "turbo typecheck",
+    "typecheck": "turbo typecheck && tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint .",
     "episodes": "tsx apps/cli/src/episodes.ts",
     "render:still": "tsx apps/cli/src/render-still.ts",
@@ -19,6 +19,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@trade-replay/adapters": "workspace:*",
+    "@trade-replay/core": "workspace:*",
     "@types/node": "^22.19.0",
     "eslint": "^9.39.1",
     "tsx": "^4.20.6",
