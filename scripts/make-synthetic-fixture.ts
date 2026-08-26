@@ -141,8 +141,8 @@ function buildFills(): HlFillOut[] {
   return out.sort((a, b) => a.time - b.time);
 }
 
-/** Piecewise-linear price path through the fill prices, with deterministic noise. */
-function priceAt(coin: string, t: number, rand: () => number): number {
+/** Piecewise-linear price path through the fill prices. No noise — the walk adds it. */
+function anchorAt(coin: string, t: number): number {
   const anchors = LEGS.filter((l) => l.coin === coin).map((l) => ({
     t: BASE + l.hours * HOUR,
     p: l.px,
@@ -167,7 +167,7 @@ function priceAt(coin: string, t: number, rand: () => number): number {
     base = lo.p + ((hi.p - lo.p) * (t - lo.t)) / span;
   }
 
-  return base * (1 + (rand() - 0.5) * 0.012);
+  return base;
 }
 
 interface HlCandleOut {
@@ -189,10 +189,15 @@ function buildCandles(coin: string, interval: string, stepMs: number, decimals: 
   const to = BASE + 232 * HOUR;
   const bars: HlCandleOut[] = [];
 
+  // A continuous walk: each bar opens where the last one closed. Drawing open and
+  // close from independent noise made half the bars print red inside a clean uptrend.
+  let prevClose = anchorAt(coin, from);
+
   for (let t = from; t < to; t += stepMs) {
-    const o = priceAt(coin, t, rand);
-    const c = priceAt(coin, t + stepMs, rand);
-    const drift = Math.abs(c - o) + o * 0.002;
+    const o = prevClose;
+    const c = anchorAt(coin, t + stepMs) * (1 + (rand() - 0.5) * 0.005);
+    prevClose = c;
+    const drift = Math.abs(c - o) + o * 0.0018;
     const h = Math.max(o, c) + drift * rand();
     const l = Math.min(o, c) - drift * rand();
     bars.push({

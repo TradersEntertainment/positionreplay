@@ -8,6 +8,9 @@
   },
   "dependencies": {
     "@trade-replay/adapters": "workspace:*",
-    "@trade-replay/core": "workspace:*"
+    "@trade-replay/core": "workspace:*",
+    "@trade-replay/renderer": "workspace:*",
+    "@napi-rs/canvas": "^0.1.85",
+    "@fontsource/jetbrains-mono": "^5.2.6"
   }
 }
