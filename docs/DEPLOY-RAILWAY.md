@@ -72,33 +72,45 @@ a deployment that forgets it gets 503s from the worker, not an open door.
 | App Sleeping | **off** |
 | Restart Policy | On Failure, ~10 retries |
 
-### ffmpeg — set this as a variable, not a file
+### ffmpeg — the part that will cost you an hour
 
-Add to the worker service's variables:
+`src/preflight.ts` refuses to boot without ffmpeg **and libx264** (SPEC §15: "a render
+worker that silently can't render is worse than one that won't boot"), so this failure
+is loud and unambiguous:
 
 ```
-NIXPACKS_APT_PKGS=ffmpeg
+[worker] PREFLIGHT FAILED
+Could not run "ffmpeg" ... spawnSync ffmpeg ENOENT
 ```
 
-**`apps/worker/nixpacks.toml` is not enough on its own, and this is the first thing
-that will bite you.** Nixpacks reads its config from the *build root*. Railway builds
-this repo from the root, so it looks for `/nixpacks.toml` and never sees the one in
-`apps/worker/` — that file only applies if the service's Root Directory is set to
-`apps/worker`, which would break the pnpm workspace install. The variable is
-per-service, so `web` does not carry an ffmpeg it has no use for.
+That is never a code problem. It says the image has no ffmpeg, and redeploying without
+changing the image reproduces it every time. Three routes, ordered by how much they ask
+you to trust the platform:
 
-A root-level `nixpacks.toml` would work too, but it applies to every service built from
-this repo, which means shipping ffmpeg inside the web image as well.
+**1. Dockerfile — deterministic. Use this if the others waste your time.**
 
-`src/preflight.ts` checks for ffmpeg **and libx264** at boot and refuses to start
-without them — SPEC §15: "a render worker that silently can't render is worse than one
-that won't boot." So a crash loop whose log says `PREFLIGHT FAILED ... spawnSync ffmpeg
-ENOENT` means exactly one thing: the image has no ffmpeg. It is not a code failure, and
-retrying the deploy without changing the image will reproduce it every time.
+Settings → Build → Builder: **Dockerfile**, Dockerfile Path: `apps/worker/Dockerfile`.
+Leave the build context at the repository root — the pnpm workspace needs the root
+lockfile and `packages/`.
+
+With a Dockerfile the build and start come from the image, so **clear this service's
+custom Build Command and Start Command** or they override it.
+
+**2. `NIXPACKS_APT_PKGS=ffmpeg` — only if the builder really is Nixpacks.**
+
+Check Settings → Build → Builder first. Railway defaults new projects to **Railpack**,
+which ignores every `NIXPACKS_*` variable, so setting this on a Railpack service does
+nothing at all and the crash loop continues unchanged. Switch the builder to Nixpacks,
+or use the Dockerfile.
+
+**3. `apps/worker/nixpacks.toml` — does nothing on its own.** Nixpacks reads config from
+the *build root*, and this repo builds from the root, so it looks for `/nixpacks.toml`
+and never sees that file. It applies only when the build root is `apps/worker`, which
+here would break the workspace install. It is kept for `nixpacks build` run directly in
+that directory, and says so in a comment.
 
 ### Variables
 ```
-NIXPACKS_APT_PKGS=ffmpeg
 RENDER_TRANSPORT=http
 RENDER_WORKER_TOKEN=<the same value as web>
 WEB_URL=http://<web-service>.railway.internal:8080
@@ -165,5 +177,5 @@ services carry the same token.
 | Page renders unstyled, chunks 404 | `next start` used instead of the standalone server |
 | `cache: "unavailable"` in health | `DATABASE_URL` not pointing at the mounted volume |
 | MP4 stuck on "Queued" | worker cannot reach `WEB_URL`, or the tokens differ |
-| Worker crash loop, `PREFLIGHT FAILED`, `spawnSync ffmpeg ENOENT` | `NIXPACKS_APT_PKGS=ffmpeg` not set on the worker service — the nixpacks.toml in `apps/worker/` is not read from a root build |
+| Worker crash loop, `PREFLIGHT FAILED`, `spawnSync ffmpeg ENOENT` | No ffmpeg in the image. `NIXPACKS_APT_PKGS` does nothing under Railpack, and `apps/worker/nixpacks.toml` is not read from a root build — use the Dockerfile |
 | Downloads 410 "gone from disk" | `RENDER_OUTPUT_DIR` not on the volume, so it vanished on redeploy |
