@@ -7,7 +7,8 @@
  * opens one connection per process and shares it.
  */
 
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
@@ -28,6 +29,24 @@ export function resolveDatabasePath(url: string, cwd: string = process.cwd()): s
   const raw = url.startsWith('file:') ? url.slice('file:'.length) : url;
   if (raw === ':memory:') return raw;
   return isAbsolute(raw) ? raw : join(cwd, raw);
+}
+
+/**
+ * Absolute path to better-sqlite3's compiled addon.
+ *
+ * Its `bindings` lookup searches relative to the *calling* module's directory. Inside
+ * a bundler's server output that directory is the bundle, not the package, so the
+ * addon is never found and the cache silently disables itself. Passing the path
+ * explicitly sidesteps the search entirely.
+ */
+function resolveNativeBinding(): string | undefined {
+  try {
+    const entry = createRequire(import.meta.url).resolve('better-sqlite3');
+    const candidate = join(dirname(entry), '..', 'build', 'Release', 'better_sqlite3.node');
+    return existsSync(candidate) ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface CacheHandle {
@@ -52,7 +71,8 @@ export function openCache(options: OpenOptions = {}): CacheHandle {
 
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
 
-  const sqlite = new Database(path);
+  const nativeBinding = resolveNativeBinding();
+  const sqlite = new Database(path, nativeBinding ? { nativeBinding } : {});
   // WAL survives a crash mid-write and lets a reader run alongside the writer.
   if (path !== ':memory:') sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');

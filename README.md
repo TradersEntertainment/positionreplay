@@ -11,7 +11,8 @@ Replay any trader's position from open to close as an animated, time-lapse chart
 | **M1** core + Hyperliquid adapter + `episodes` CLI | Code complete, 165 tests green. **Live verification pending** — see `docs/VERIFYING-M1.md` |
 | **M2** renderer + one-frame PNG | Complete |
 | **M3** interactive player | Complete — 15/15 browser checks pass |
-| M4–M8 | Not started |
+| **M4** episode browser + caching | Complete — 12/12 browser checks pass |
+| M5–M8 | Not started |
 
 M1 is deliberately *not* marked done. SPEC §12 defines it as done when the numbers
 match Hyperliquid's own UI, and the environment this was built in blocks every venue
@@ -32,7 +33,7 @@ pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109 --fixture synthetic
 # Render one frame to out.png (M2).
 pnpm render:still 0x393d0b87ed38fc779fd9611144ae649ba6082109 --fixture synthetic --size wide
 
-# The player (M3). Omit the env var to hit the live venue.
+# The web app (M3 player + M4 browser). Omit the env var to hit the live venue.
 TRADE_REPLAY_FIXTURE=synthetic pnpm --filter @trade-replay/web dev
 
 pnpm test
@@ -40,14 +41,15 @@ pnpm typecheck
 pnpm lint
 ```
 
-`pnpm verify:m3` drives the running player in a real Chromium and checks that playback,
-seeking, the keyboard and the interval override all actually work — M3's done-criterion
-is "it feels smooth", which no unit test can answer. It needs a server already up:
+`pnpm verify:m3` and `pnpm verify:m4` drive the running app in a real Chromium: playback,
+seeking, the keyboard and the interval override for M3; the episode table, every sort
+order, sparklines and the cache for M4. Both need a server already up:
 
 ```bash
 pnpm --filter @trade-replay/web build
 cd apps/web && TRADE_REPLAY_FIXTURE=synthetic npx next start -p 3100 &
 pnpm verify:m3
+pnpm verify:m4
 ```
 
 Every command that hits the venue also accepts `--fixture`, which replays a recording
@@ -60,7 +62,8 @@ exercised is the one that runs in production.
 packages/core        pure TS, zero deps: the §5 fold and the §6 timeline
 packages/adapters    venue connectors; Hyperliquid so far
 packages/renderer    pure Canvas 2D; runs in a browser AND in Node
-apps/web             Next.js player + /api adapter proxies
+packages/cache       SPEC §10 caching on SQLite via Drizzle
+apps/web             Next.js browser + player + /api adapter proxies
 apps/cli             episodes / render-still / verify:m1
 scripts/             capture-hl, verify-m3, synthetic fixture generator
 fixtures/            recorded and synthetic venue responses
@@ -73,6 +76,15 @@ Three boundaries are load-bearing and enforced, not just documented:
   globals, and M2 renders it under `@napi-rs/canvas` in plain Node, which is the real
   proof. Break this and M8's server-side MP4 export becomes impossible.
 - **Venue shapes stop at the adapter.** Everything above speaks core types only.
+- **The cache depends on adapters, never the reverse.** Inverting it would make the
+  graph circular and drag a native SQLite binding into every bundle touching an adapter.
+
+## Cache
+
+`DATABASE_URL` (default `file:.data/cache.db`) holds raw venue responses, not
+reconstructed episodes — the §5 fold re-runs on every read, so a later correction fixes
+cached data too. Fixture runs get their own file so synthetic numbers can never mix with
+real ones.
 
 ## Data sources
 

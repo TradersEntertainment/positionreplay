@@ -6,6 +6,9 @@ const config: NextConfig = {
   // The workspace packages ship TypeScript sources, not build output.
   transpilePackages: ['@trade-replay/core', '@trade-replay/renderer', '@trade-replay/adapters'],
   outputFileTracingRoot: new URL('../../', import.meta.url).pathname,
+  // better-sqlite3 is a native binding: webpack cannot bundle a .node file, so it has
+  // to be required at runtime from node_modules instead.
+  serverExternalPackages: ['better-sqlite3'],
 
   webpack(config) {
     // The workspace packages are ESM TypeScript, so their relative imports carry the

@@ -23,7 +23,7 @@ import {
   replayIdForEpisode,
   seriesRangeFor,
 } from '@trade-replay/core';
-import type { PositionEpisode, PriceSeries } from '@trade-replay/core';
+import type { PositionEpisode, PriceSeries, TimeRange } from '@trade-replay/core';
 
 /**
  * One SQLite connection for the whole process, opened lazily.
@@ -49,7 +49,15 @@ function cache(): SourceCache | undefined {
         // The connection outlives any single request, so a request must not close it.
         close: () => undefined,
       };
-    } catch {
+    } catch (error) {
+      // Degrading to uncached is correct, but doing it silently is not: a misconfigured
+      // volume or an unbundled native binding would look like the cache simply never
+      // helping, with nothing to point at.
+      console.warn(
+        `[cache] disabled — falling back to uncached reads: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       sharedCache = null;
     }
   }
@@ -63,6 +71,8 @@ export function cacheAvailable(): boolean {
 
 export interface EpisodeSummary {
   replayId: string;
+  /** Normalized 0..1 closes across the episode, for the row sparkline. */
+  spark: number[];
   instrument: string;
   displayName: string;
   direction: 'long' | 'short';
@@ -135,14 +145,94 @@ async function loadAll(address: string) {
   return { source, input, fills, episodes };
 }
 
+/** Points per row sparkline. Enough to show a shape, few enough to inline in HTML. */
+const SPARK_POINTS = 32;
+
+/**
+ * Sparkline data for every episode, using one series per instrument.
+ *
+ * Fetching per episode would be N requests for an N-episode address. One coarse series
+ * per instrument, spanning that instrument's whole history and sliced per row, is 1-3
+ * requests for the page — and the §10 cache makes repeat loads free.
+ *
+ * A failure here degrades the row to a flat line rather than failing the page: a
+ * missing sparkline is cosmetic, an unreachable episode list is not.
+ */
+async function loadSparklines(
+  episodes: readonly PositionEpisode[],
+  ctx: Parameters<typeof hyperliquidAdapter.fetchSeries>[1],
+  now: number,
+): Promise<Map<string, number[]>> {
+  const byInstrument = new Map<string, TimeRange>();
+  for (const episode of episodes) {
+    const range = seriesRangeFor(episode, now);
+    const existing = byInstrument.get(episode.instrument);
+    byInstrument.set(
+      episode.instrument,
+      existing
+        ? { from: Math.min(existing.from, range.from), to: Math.max(existing.to, range.to) }
+        : range,
+    );
+  }
+
+  const series = new Map<string, PriceSeries>();
+  await Promise.all(
+    [...byInstrument].map(async ([instrument, range]) => {
+      // Coarse on purpose: a sparkline needs a shape, not resolution.
+      const picked = pickInterval(range.to - range.from, HL_INTERVALS, { targetFrames: 120 });
+      try {
+        series.set(
+          instrument,
+          await hyperliquidAdapter.fetchSeries(
+            { instrument, interval: picked.interval, ...range },
+            ctx,
+          ),
+        );
+      } catch {
+        // Delisted market, or a range past the venue's retention (SPEC §11 case 8).
+      }
+    }),
+  );
+
+  const sparks = new Map<string, number[]>();
+  for (const episode of episodes) {
+    const found = series.get(episode.instrument);
+    if (!found) continue;
+    const spark = sliceSpark(found, episode.openedAt, episode.closedAt ?? now);
+    if (spark.length > 1) sparks.set(episode.id, spark);
+  }
+  return sparks;
+}
+
+/** Closes between two timestamps, downsampled and normalized to 0..1. */
+function sliceSpark(series: PriceSeries, from: number, to: number): number[] {
+  const points =
+    series.kind === 'ohlcv'
+      ? series.candles.filter((c) => c.t >= from && c.t <= to).map((c) => c.c)
+      : series.points.filter((p) => p.t >= from && p.t <= to).map((p) => p.p);
+
+  if (points.length < 2) return [];
+
+  const step = Math.max(1, Math.floor(points.length / SPARK_POINTS));
+  const sampled = points.filter((_, i) => i % step === 0);
+
+  const min = Math.min(...sampled);
+  const max = Math.max(...sampled);
+  const span = max - min;
+  // A perfectly flat window still needs to render as a line, not a divide-by-zero.
+  return span === 0 ? sampled.map(() => 0.5) : sampled.map((p) => (p - min) / span);
+}
+
 export async function loadEpisodes(address: string): Promise<EpisodesResult> {
   const { source, input, episodes } = await loadAll(address);
+  const sparks = await loadSparklines(episodes, source.ctx, Date.now());
 
   return {
     address: input.address,
     label: source.label,
     episodes: episodes.map((e) => ({
       replayId: replayIdForEpisode(e, input.address),
+      spark: sparks.get(e.id) ?? [],
       instrument: e.instrument,
       displayName: e.displayName,
       direction: e.direction,
