@@ -9,11 +9,18 @@
  * and §12), and building it now would be scaffolding a milestone that has not started.
  */
 
-import { VENUE_LIMITATIONS, adapterFor } from '@trade-replay/adapters';
-import type { Adapter, AdapterWarning } from '@trade-replay/adapters';
+import { VENUE_LIMITATIONS, adapterFor, limitationText } from '@trade-replay/adapters';
+import type { Adapter, AdapterWarning, VenueLimitation } from '@trade-replay/adapters';
 import { createSource, fixtureFromEnv, findWorkspaceRoot } from '@trade-replay/adapters/source';
 import type { SourceCache } from '@trade-replay/adapters/source';
-import { cacheUrlFor, createCandleCache, createFillCache, openCache } from '@trade-replay/cache';
+import {
+  cacheUrlFor,
+  createCandleCache,
+  createCsvDocumentStore,
+  createFillCache,
+  openCache,
+} from '@trade-replay/cache';
+import type { CsvDocumentStore } from '@trade-replay/adapters';
 import {
   buildEpisodes,
   decodeReplayId,
@@ -34,6 +41,8 @@ import type { PositionEpisode, PriceSeries, TimeRange, VenueId } from '@trade-re
  * A cache is an optimisation: if it cannot be opened, requests still work uncached.
  */
 let sharedCache: SourceCache | null | undefined;
+/** SPEC §4.6's uploaded documents, on the same connection. */
+let sharedCsvStore: CsvDocumentStore | undefined;
 
 function cache(): SourceCache | undefined {
   if (sharedCache === undefined) {
@@ -42,6 +51,7 @@ function cache(): SourceCache | undefined {
         url: cacheUrlFor(fixtureFromEnv()),
         cwd: findWorkspaceRoot(),
       });
+      sharedCsvStore = createCsvDocumentStore(handle.db);
       sharedCache = {
         candleCache: createCandleCache(handle.db),
         fillCache: createFillCache(handle.db),
@@ -68,6 +78,17 @@ export function cacheAvailable(): boolean {
   return cache() !== undefined;
 }
 
+/**
+ * Where uploaded CSVs live. SPEC §4.6.
+ *
+ * Unlike the candle cache, this is not an optimisation: without it a CSV upload has
+ * nowhere to go, so the caller has to be told rather than silently degraded.
+ */
+export function csvStore(): CsvDocumentStore | undefined {
+  cache();
+  return sharedCsvStore;
+}
+
 export interface EpisodeSummary {
   replayId: string;
   /** Normalized 0..1 closes across the episode, for the row sparkline. */
@@ -91,7 +112,7 @@ export interface EpisodesResult {
   address: string;
   label: string;
   /** SPEC §4.4.1: shown before any numbers are, for venues that have one. */
-  limitation?: string;
+  limitation?: VenueLimitation;
   episodes: EpisodeSummary[];
   warnings: AdapterWarning[];
   provenanceWarning?: string;
@@ -102,7 +123,7 @@ export interface ReplayResult {
   venue: VenueId;
   address: string;
   label: string;
-  limitation?: string;
+  limitation?: VenueLimitation;
   /** The venue cannot report this account's funding; the HUD must not print zero. */
   fundingUnavailable: boolean;
   episode: PositionEpisode;
@@ -134,7 +155,11 @@ function stripRaw(episode: PositionEpisode): PositionEpisode {
 
 async function loadAll(venue: VenueId, address: string) {
   const adapter: Adapter = adapterFor(venue);
-  const source = createSource(fixtureFromEnv(), { venue, cache: cache() });
+  const source = createSource(fixtureFromEnv(), {
+    venue,
+    cache: cache(),
+    csvStore: csvStore(),
+  });
   const input = await adapter.parseInput(address, source.ctx);
 
   const fills = await adapter.fetchFills(input, undefined, source.ctx);
@@ -291,8 +316,11 @@ export async function loadReplay(
   );
 
   const limitation = VENUE_LIMITATIONS[ref.venue];
+  // The canvas notice gets the one-line form: there is no bold lead-in to hang a
+  // title on, and these are rendered into the exported image.
+  const limitationLine = limitationText(ref.venue);
   const notices = [
-    ...(limitation ? [limitation] : []),
+    ...(limitationLine ? [limitationLine] : []),
     ...source.warnings.map((w) => w.message),
     ...(picked.warning ? [picked.warning] : []),
     ...(source.provenanceWarning ? ['SYNTHETIC DATA — not a real position'] : []),

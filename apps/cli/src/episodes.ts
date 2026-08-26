@@ -11,7 +11,7 @@
  */
 
 import { parseArgs } from 'node:util';
-import { VENUE_LIMITATIONS, adapterFor, isSupportedVenue, SUPPORTED_VENUES } from '@trade-replay/adapters';
+import { adapterFor, isSupportedVenue, limitationText, SUPPORTED_VENUES } from '@trade-replay/adapters';
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
@@ -142,7 +142,7 @@ async function main(): Promise<number> {
   const input = await adapter.parseInput(account, source.ctx);
 
   // SPEC §4.4.1 option A: the limitation has to be visible before any numbers are.
-  const limitation = VENUE_LIMITATIONS[adapter.id];
+  const limitation = limitationText(adapter.id);
   if (limitation && !options.json) console.log(`${yellow('note    ')} ${limitation}`);
 
   if (!options.json) {

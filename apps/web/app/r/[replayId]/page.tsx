@@ -66,7 +66,8 @@ export default async function ReplayPage({
             className="border border-tr-notice/40 bg-tr-notice/10 p-3 text-xs text-tr-notice"
             data-testid="venue-limitation"
           >
-            <span className="font-bold">Open positions only</span> — {replay.limitation}
+            <span className="font-bold">{replay.limitation.title}</span> —{' '}
+            {replay.limitation.detail}
           </p>
         ) : null}
 

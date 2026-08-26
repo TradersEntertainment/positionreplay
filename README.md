@@ -14,7 +14,8 @@ Replay any trader's position from open to close as an animated, time-lapse chart
 | **M4** episode browser + caching | Complete — 12/12 browser checks pass |
 | **M5** client-side export | Complete — 11/11 browser checks pass |
 | **M6** Polymarket Perps adapter | Complete — 11/11 browser checks pass |
-| M7–M8 | Not started |
+| **M7** CSV adapter + Binance klines | Complete — 17/17 browser checks pass |
+| M8 server MP4 worker | Not started |
 
 M1 is deliberately *not* marked done. SPEC §12 defines it as done when the numbers
 match Hyperliquid's own UI, and the environment this was built in blocks every venue
@@ -31,6 +32,9 @@ pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109
 
 # The same, on Polymarket Perps. Only currently-open positions exist there — see below.
 pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109 --venue polymarket-perps
+
+# A CSV of your own fills. In the web app you upload it; the CLI takes a fixture.
+pnpm episodes --venue csv --fixture synthetic
 
 # ...or offline, against a recorded fixture.
 pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109 --fixture synthetic
@@ -57,7 +61,13 @@ pnpm verify:m3
 pnpm verify:m4
 pnpm verify:m5
 pnpm verify:m6
+pnpm verify:m7
 ```
+
+`verify:m7` uploads a CSV through the real browser flow, then proves the mapping step
+is not decorative: it unmaps the fee column, re-applies, and checks the reconstructed
+PnL moved by exactly the fees in the file. It also drives SPEC §4.6's fallback —
+a symbol Binance does not list, replayed from a user-supplied OHLCV file.
 
 `verify:m6` drives the venue toggle to the Perps browser, checks that option A's
 limitation is stated on the page and not only in a doc, and samples the canvas pixels for
@@ -76,12 +86,13 @@ exercised is the one that runs in production.
 
 ```
 packages/core        pure TS, zero deps: the §5 fold and the §6 timeline
-packages/adapters    venue connectors; Hyperliquid and Polymarket Perps
+packages/adapters    venue connectors; Hyperliquid, Polymarket Perps and CSV
 packages/renderer    pure Canvas 2D; runs in a browser AND in Node
 packages/cache       SPEC §10 caching on SQLite via Drizzle
 apps/web             Next.js browser + player + /api adapter proxies
 apps/cli             episodes / render-still / verify:m1
-scripts/             capture-hl, capture-pm, verify-m3…m6, synthetic fixture generator
+scripts/             capture-hl / capture-pm / capture-binance, verify-m3…m7,
+                     the three synthetic fixture generators
 fixtures/            recorded and synthetic venue responses
 ```
 
@@ -114,9 +125,30 @@ documented Hyperliquid response so the code paths run offline, and every output 
 from it is stamped `SYNTHETIC DATA` — including the rendered PNG, because an export is
 a screenshot someone posts as fact.
 
-`fixtures/polymarket-perps/synthetic` is invented the same way and stamped the same way.
+`fixtures/polymarket-perps/synthetic` and `fixtures/csv/synthetic` are invented the same
+way and stamped the same way.
 
-Real recordings come from `pnpm capture:hl <address>` and `pnpm capture:pm <address>`.
+Real recordings come from `pnpm capture:hl <address>`, `pnpm capture:pm <address>` and
+`pnpm capture:binance <trades.csv>`.
+
+Regenerating a fixture drops that fixture's cache database. SPEC §10 caches a closed
+candle forever, which is right for a venue and wrong for a file that just changed —
+without it the next run is served the old bars and the fixture looks unchanged.
+
+## CSV upload
+
+Drop any exchange export on `/`. No particular header names are required: the mapping
+step guesses from the header, then from what the values look like, and every column can
+be changed. The file is stored server-side under a hash of its content *and* its
+mapping, which is what makes the replay link shareable — and means two mappings of one
+file are two different documents rather than one link whose meaning silently changes.
+
+Candles come from Binance public klines, so each symbol needs a Binance symbol
+(`BTC` → `BTCUSDT`, suggested but never assumed). For anything Binance does not list,
+upload your own OHLCV file for it instead — SPEC §4.6's fallback, and no network is
+touched for those symbols at all.
+
+Funding shows `—`: a trades file carries no funding payments, so there are none to read.
 
 ## Polymarket Perps: what it cannot show
 

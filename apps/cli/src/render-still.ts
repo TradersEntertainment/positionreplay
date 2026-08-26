@@ -15,7 +15,7 @@ import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 import { GlobalFonts, createCanvas } from '@napi-rs/canvas';
-import { VENUE_LIMITATIONS, adapterFor, isSupportedVenue } from '@trade-replay/adapters';
+import { adapterFor, isSupportedVenue, limitationText } from '@trade-replay/adapters';
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes, buildFrames, pickInterval, seriesRangeFor } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
@@ -191,7 +191,7 @@ pnpm render:still <address> [options]
 
   // Notices must reach the image itself, not just the terminal: an export is a
   // screenshot someone posts as fact (CLAUDE.md).
-  const limitation = VENUE_LIMITATIONS[adapter.id];
+  const limitation = limitationText(adapter.id);
   const notices = [
     ...(limitation ? [limitation] : []),
     ...source.warnings.map((w) => w.message),

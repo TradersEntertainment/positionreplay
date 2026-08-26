@@ -64,7 +64,13 @@ export function resolveFixtureDir(nameOrPath: string, venue: VenueId = 'hyperliq
 function fixtureFetchFor(
   venue: VenueId,
   dir: string,
-): { fetch: FetchLike; warning?: string; csvStore?: CsvDocumentStore; defaultAccount?: string } {
+): {
+  fetch: FetchLike;
+  warning?: string;
+  /** Given the host's store, if any, returns the one the adapter should use. */
+  csvStore?: (host: CsvDocumentStore | undefined) => CsvDocumentStore;
+  defaultAccount?: string;
+} {
   if (venue === 'polymarket-perps') {
     const store = loadPerpsFixtureStore(dir);
     return {
@@ -79,7 +85,7 @@ function fixtureFetchFor(
     const store = loadCsvFixtureStore(dir);
     return {
       fetch: createBinanceFixtureFetch(store),
-      csvStore: readOnlyStore(store.document),
+      csvStore: (host) => seededStore(store.document, host),
       defaultAccount: store.document.id,
       ...(store.meta.warning ? { warning: store.meta.warning } : {}),
     };
@@ -92,11 +98,21 @@ function fixtureFetchFor(
   };
 }
 
-/** Serves exactly the fixture's document; `put` is a no-op, since a fixture is fixed. */
-function readOnlyStore(document: CsvDocument): CsvDocumentStore {
+/**
+ * The fixture's document, plus whatever the host stores.
+ *
+ * A seed rather than a wall: the fixture guarantees one document exists offline, but
+ * an upload made while running against fixtures still has to work — otherwise the
+ * upload flow is only reachable with live network access, which is exactly the thing
+ * this environment does not have.
+ */
+function seededStore(document: CsvDocument, host: CsvDocumentStore | undefined): CsvDocumentStore {
   return {
-    get: async (id) => (id === document.id ? document : null),
-    put: async () => undefined,
+    get: async (id) => (id === document.id ? document : ((await host?.get(id)) ?? null)),
+    // The fixture itself is immutable; anything else goes to the host, or nowhere.
+    put: async (doc) => {
+      if (doc.id !== document.id) await host?.put(doc);
+    },
   };
 }
 
@@ -210,7 +226,7 @@ export function createSource(fixture?: string, options: CreateSourceOptions = {}
       sleep: async () => undefined,
       onWarning,
       ...cacheCtx,
-      ...(replay.csvStore ? { csvStore: replay.csvStore } : {}),
+      ...(replay.csvStore ? { csvStore: replay.csvStore(options.csvStore) } : {}),
     },
     warnings,
     label: `fixture ${dir.replace(findWorkspaceRoot(), '').replace(/^[/\\]/, '')}`,

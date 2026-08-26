@@ -16,7 +16,7 @@ export default async function AddressPage({
   params: Promise<{ venue: string; address: string }>;
 }) {
   const { venue, address } = await params;
-  // CSV has no adapter yet (M7), so an unknown venue is a 404 rather than a broken page.
+  // An unknown venue is a 404 rather than a broken page.
   if (!isSupportedVenue(venue)) notFound();
 
   let result;
@@ -45,7 +45,8 @@ export default async function AddressPage({
             className="border border-tr-notice/40 bg-tr-notice/10 p-3 text-xs text-tr-notice"
             data-testid="venue-limitation"
           >
-            <span className="font-bold">Open positions only</span> — {result.limitation}
+            <span className="font-bold">{result.limitation.title}</span> —{' '}
+            {result.limitation.detail}
           </p>
         ) : null}
 
