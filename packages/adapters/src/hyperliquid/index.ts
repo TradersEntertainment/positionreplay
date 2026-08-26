@@ -14,6 +14,8 @@ import { coinForInstrument, mapCandles, mapFill, mapFunding } from './map.js';
 import { HlCandlesSchema, HlFillsSchema, HlFundingListSchema } from './schemas.js';
 
 export { HL_API_BASE } from './client.js';
+// Pure replay helper; the Node-only fixture loader lives behind ./hyperliquid/fixtures.
+export * from './fixtureFetch.js';
 export * from './map.js';
 export * from './schemas.js';
 

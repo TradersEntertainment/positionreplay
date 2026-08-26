@@ -33,6 +33,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.12)
 
+  apps/cli:
+    dependencies:
+      '@trade-replay/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
+      '@trade-replay/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
   packages/adapters:
     dependencies:
       '@trade-replay/core':

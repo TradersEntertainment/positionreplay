@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./hyperliquid": "./src/hyperliquid/index.ts"
+    "./hyperliquid": "./src/hyperliquid/index.ts",
+    "./hyperliquid/fixtures": "./src/hyperliquid/fixtureStore.node.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
