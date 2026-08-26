@@ -92,3 +92,23 @@ export const candleCoverage = sqliteTable(
     index('coverage_key_idx').on(table.venue, table.instrument, table.interval, table.fromTs),
   ],
 );
+
+/**
+ * Uploaded CSVs. SPEC §4.6.
+ *
+ * The file is kept verbatim alongside the confirmed mapping, for the same reason
+ * `fills.payload` is: applying the mapping on read means a fix to the parser corrects
+ * every document already uploaded, not only the ones uploaded after it.
+ *
+ * `id` is a content hash of the file plus its mapping, so re-uploading the same file
+ * with the same mapping is idempotent rather than accumulating copies.
+ */
+export const csvDocuments = sqliteTable('csv_documents', {
+  id: text('id').primaryKey(),
+  filename: text('filename').notNull(),
+  text: text('text').notNull(),
+  mapping: text('mapping', { mode: 'json' }).notNull(),
+  /** Normalized CSV symbol -> price source (Binance symbol, or a user OHLCV file). */
+  symbols: text('symbols', { mode: 'json' }).notNull(),
+  createdAt: integer('created_at').notNull(),
+});

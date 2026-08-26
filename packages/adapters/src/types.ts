@@ -13,6 +13,7 @@ import type {
   TimeRange,
   VenueId,
 } from '@trade-replay/core';
+import type { CsvDocumentStore } from './csv/document.js';
 
 export interface AdapterInput {
   venue: VenueId;
@@ -43,7 +44,11 @@ export type AdapterWarningKind =
   /** SPEC §4.4.1 option A: only the current open cycle is retrievable on Perps. */
   | 'perps_open_positions_only'
   /** The account holds an instrument missing from the venue's own instrument list. */
-  | 'unknown_instrument';
+  | 'unknown_instrument'
+  /** SPEC §4.6: a CSV row could not be read with the confirmed mapping. */
+  | 'csv_rows_rejected'
+  /** A CSV row's field count disagreed with its header. */
+  | 'csv_ragged_rows';
 
 /**
  * A non-fatal problem the UI must surface.
@@ -183,6 +188,14 @@ export interface AdapterContext {
   /** SPEC §10. Absent means every call goes to the venue. */
   candleCache?: CandleCache;
   fillCache?: FillCache;
+  /**
+   * SPEC §4.6: where uploaded CSVs live.
+   *
+   * Declared here rather than passed to the CSV adapter directly for the same reason
+   * the caches are: the adapter stays a pure function of its context, and the host
+   * decides whether that is SQLite, memory, or nothing at all.
+   */
+  csvStore?: CsvDocumentStore;
 }
 
 export interface Adapter {
@@ -199,9 +212,10 @@ export interface Adapter {
   /**
    * Validate + normalize whatever the user typed.
    *
-   * SPEC §4.1 types this as `string | File`; the File branch arrives with the CSV
-   * adapter in M7. Widening it before there is an implementation would be a
-   * placeholder, which CLAUDE.md forbids.
+   * SPEC §4.1 types this as `string | File`. It stayed a string: the CSV adapter
+   * takes the id of an already-stored upload rather than a File, because a File
+   * cannot be put in a URL and SPEC §9's shareable deep link needs the account
+   * identifier to survive a page load.
    */
   parseInput(raw: string, ctx?: AdapterContext): Promise<AdapterInput>;
 

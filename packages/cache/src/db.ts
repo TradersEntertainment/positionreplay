@@ -139,4 +139,14 @@ function applySchema(db: CacheDb): void {
     CREATE INDEX IF NOT EXISTS coverage_key_idx
       ON candle_coverage (venue, instrument, interval, from_ts)
   `);
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS csv_documents (
+      id TEXT PRIMARY KEY,
+      filename TEXT NOT NULL,
+      text TEXT NOT NULL,
+      mapping TEXT NOT NULL,
+      symbols TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `);
 }

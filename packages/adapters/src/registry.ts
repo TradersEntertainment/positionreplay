@@ -10,11 +10,13 @@ import type { VenueId } from '@trade-replay/core';
 import type { Adapter } from './types.js';
 import { hyperliquidAdapter } from './hyperliquid/index.js';
 import { polymarketPerpsAdapter } from './polymarket-perps/index.js';
+import { csvAdapter } from './csv/index.js';
 
-/** Venues with a working adapter. CSV arrives in M7. */
+/** Every venue with a working adapter. */
 export const ADAPTERS: Partial<Record<VenueId, Adapter>> = {
   hyperliquid: hyperliquidAdapter,
   'polymarket-perps': polymarketPerpsAdapter,
+  csv: csvAdapter,
 };
 
 export const SUPPORTED_VENUES = Object.keys(ADAPTERS) as VenueId[];
@@ -40,6 +42,7 @@ export function isSupportedVenue(venue: string): venue is VenueId {
 export const VENUE_LABELS: Record<string, string> = {
   hyperliquid: 'Hyperliquid',
   'polymarket-perps': 'Polymarket Perps',
+  csv: 'CSV upload',
 };
 
 /**
@@ -54,4 +57,9 @@ export const VENUE_LIMITATIONS: Record<string, string | null> = {
     'Only positions that are open right now can be replayed. Polymarket Perps serves ' +
     'just the current open cycle publicly, so a position that has already closed is ' +
     'unreachable and cannot be replayed at all.',
+  csv:
+    'Prices come from Binance public klines, which are spot prices for a mapped ' +
+    'symbol — not the venue you actually traded on. Funding is unavailable, and fees ' +
+    'are only as complete as the file. Upload your own OHLCV file for a symbol ' +
+    'Binance does not list.',
 };
