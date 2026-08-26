@@ -11,7 +11,7 @@
  */
 
 import { parseArgs } from 'node:util';
-import { hyperliquidAdapter } from '@trade-replay/adapters';
+import { VENUE_LIMITATIONS, adapterFor, isSupportedVenue, SUPPORTED_VENUES } from '@trade-replay/adapters';
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
@@ -21,6 +21,7 @@ import { createCachedSource } from '@trade-replay/cache';
 const USAGE = `
 ${bold('pnpm episodes')} <address> [options]
 
+  --venue <v>        hyperliquid (default) or polymarket-perps
   --fixture [name]   Replay a recorded fixture instead of calling the venue.
                      Defaults to "synthetic". Accepts a name under fixtures/hyperliquid/
                      or a path.
@@ -32,6 +33,7 @@ ${bold('pnpm episodes')} <address> [options]
 
 interface Options {
   address: string;
+  venue: string;
   fixture?: string | undefined;
   instrument?: string | undefined;
   openOnly: boolean;
@@ -45,6 +47,7 @@ function parseOptions(argv: string[]): ParseResult {
     args: argv,
     allowPositionals: true,
     options: {
+      venue: { type: 'string' },
       fixture: { type: 'string' },
       instrument: { type: 'string' },
       'open-only': { type: 'boolean', default: false },
@@ -60,6 +63,7 @@ function parseOptions(argv: string[]): ParseResult {
     kind: 'run',
     options: {
       address: positionals[0]!,
+      venue: values.venue ?? 'hyperliquid',
     // `--fixture` with no value arrives as an empty string; treat that as the default.
       fixture: values.fixture === '' ? 'synthetic' : values.fixture,
       instrument: values.instrument,
@@ -82,7 +86,12 @@ function netOf(e: PositionEpisode): number {
   return e.realizedPnl - e.totalFees + e.totalFunding;
 }
 
-function renderTable(episodes: PositionEpisode[]): string {
+/**
+ * @param fundingKnown false when the venue cannot report this account's funding.
+ *
+ * Printing $0.00 there would assert that none was paid. Same rule the HUD follows.
+ */
+function renderTable(episodes: PositionEpisode[], fundingKnown: boolean): string {
   const rows = episodes.map((e, i) => [
     String(i),
     e.displayName,
@@ -94,7 +103,7 @@ function renderTable(episodes: PositionEpisode[]): string {
     num(e.avgEntry, 4),
     signed(e.realizedPnl),
     usd(e.totalFees),
-    signed(e.totalFunding),
+    fundingKnown ? signed(e.totalFunding) : dim('—'),
     bold(signed(netOf(e))),
   ]);
 
@@ -113,15 +122,27 @@ async function main(): Promise<number> {
   }
   const { options } = parsed;
 
-  const source = createCachedSource(options.fixture);
-  const input = await hyperliquidAdapter.parseInput(options.address, source.ctx);
+  if (!isSupportedVenue(options.venue)) {
+    console.error(
+      `${red('Unknown venue')} "${options.venue}". Available: ${SUPPORTED_VENUES.join(', ')}.`,
+    );
+    return 1;
+  }
+
+  const adapter = adapterFor(options.venue);
+  const source = createCachedSource(options.fixture, { venue: adapter.id });
+  const input = await adapter.parseInput(options.address, source.ctx);
+
+  // SPEC §4.4.1 option A: the limitation has to be visible before any numbers are.
+  const limitation = VENUE_LIMITATIONS[adapter.id];
+  if (limitation && !options.json) console.log(`${yellow('note    ')} ${limitation}`);
 
   if (!options.json) {
     console.log(`${dim('source  ')} ${source.label}`);
     console.log(`${dim('address ')} ${cyan(input.address)}`);
   }
 
-  const fills = await hyperliquidAdapter.fetchFills(input, undefined, source.ctx);
+  const fills = await adapter.fetchFills(input, undefined, source.ctx);
 
   if (fills.length === 0) {
     // SPEC §11 case 10: an address with zero fills is a real answer, not an error.
@@ -139,9 +160,9 @@ async function main(): Promise<number> {
     from: Math.min(...fills.map((f) => f.ts)),
     to: Math.max(...fills.map((f) => f.ts)),
   };
-  const funding = (await hyperliquidAdapter.fetchFunding?.(input, range, source.ctx)) ?? [];
+  const funding = (await adapter.fetchFunding?.(input, range, source.ctx)) ?? [];
 
-  let episodes = buildEpisodes(fills, { venue: 'hyperliquid', funding });
+  let episodes = buildEpisodes(fills, { venue: adapter.id, funding });
   if (options.instrument) {
     episodes = episodes.filter((e) => e.instrument === options.instrument);
   }
@@ -161,14 +182,16 @@ async function main(): Promise<number> {
   }
 
   console.log(`${dim('fills   ')} ${fills.length}   ${dim('funding')} ${funding.length}\n`);
-  console.log(renderTable(episodes));
+  const fundingKnown = adapter.fetchFunding !== undefined;
+  console.log(renderTable(episodes, fundingKnown));
 
   const totalNet = episodes.reduce((sum, e) => sum + netOf(e), 0);
   const totalFees = episodes.reduce((sum, e) => sum + e.totalFees, 0);
   const totalFunding = episodes.reduce((sum, e) => sum + e.totalFunding, 0);
   console.log(
     `\n${dim('episodes')} ${episodes.length}   ${dim('fees')} ${usd(totalFees)}   ` +
-      `${dim('funding')} ${signed(totalFunding)}   ${dim('net')} ${bold(signed(totalNet))}`,
+      `${dim('funding')} ${fundingKnown ? signed(totalFunding) : dim('unavailable')}   ` +
+      `${dim('net')} ${bold(signed(totalNet))}`,
   );
 
   // SPEC §14: a disagreement with the venue is logged, never silently resolved.
@@ -181,6 +204,15 @@ async function main(): Promise<number> {
           `(${((n.relativeDelta ?? 0) * 100).toFixed(2)}% apart)`,
       );
     }
+  }
+
+  if (!fundingKnown) {
+    console.log(
+      dim(
+        `  net excludes funding: ${adapter.id} serves per-account funding only to an ` +
+          `authenticated session, so it is unknown rather than zero.`,
+      ),
+    );
   }
 
   if (source.warnings.length > 0) {

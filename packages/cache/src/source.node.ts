@@ -19,10 +19,10 @@ import { openCache } from './db.js';
  * stamped everywhere they surface; letting them share a database with live data would
  * quietly undo that, since the two are indistinguishable once they are rows.
  */
-export function cacheUrlFor(fixture?: string): string {
+export function cacheUrlFor(fixture?: string, venue = 'hyperliquid'): string {
   if (fixture === undefined) return process.env['DATABASE_URL'] ?? 'file:.data/cache.db';
-  const slug = fixture.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'fixture';
-  return `file:.data/cache-fixture-${slug}.db`;
+  const slug = `${venue}-${fixture}`.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return `file:.data/cache-fixture-${slug || 'fixture'}.db`;
 }
 
 export interface CachedSourceOptions extends Omit<CreateSourceOptions, 'cache'> {
@@ -44,10 +44,11 @@ export function createCachedSource(fixture?: string, options: CachedSourceOption
 
   try {
     const handle = openCache({
-      url: options.databaseUrl ?? cacheUrlFor(fixture),
+      url: options.databaseUrl ?? cacheUrlFor(fixture, options.venue),
       cwd: findWorkspaceRoot(),
     });
     return createSource(fixture, {
+      ...(options.venue ? { venue: options.venue } : {}),
       cache: {
         candleCache: createCandleCache(handle.db),
         fillCache: createFillCache(handle.db),

@@ -11,3 +11,4 @@ export * from './withRetry.js';
 export * from './cacheHelpers.js';
 export { hyperliquidAdapter } from './hyperliquid/index.js';
 export { polymarketPerpsAdapter } from './polymarket-perps/index.js';
+export * from './registry.js';

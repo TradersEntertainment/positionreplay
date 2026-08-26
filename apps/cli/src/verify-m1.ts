@@ -13,7 +13,7 @@
  */
 
 import { parseArgs } from 'node:util';
-import { hyperliquidAdapter } from '@trade-replay/adapters';
+import { adapterFor, isSupportedVenue } from '@trade-replay/adapters';
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { actionForDir } from '@trade-replay/adapters/hyperliquid';
 import { buildEpisodes } from '@trade-replay/core';
@@ -127,7 +127,11 @@ async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     args: process.argv.slice(2),
     allowPositionals: true,
-    options: { fixture: { type: 'string' }, help: { type: 'boolean', default: false } },
+    options: {
+      venue: { type: 'string' },
+      fixture: { type: 'string' },
+      help: { type: 'boolean', default: false },
+    },
   });
 
   if (values.help || positionals.length === 0) {
@@ -140,14 +144,22 @@ pnpm verify:m1 <address> [--fixture <name>]
     return values.help ? 0 : 1;
   }
 
-  const source = createCachedSource(values.fixture === '' ? 'synthetic' : values.fixture);
-  const input = await hyperliquidAdapter.parseInput(positionals[0]!, source.ctx);
+  const venue = values.venue ?? 'hyperliquid';
+  if (!isSupportedVenue(venue)) {
+    console.error(`${red('Unknown venue')} "${venue}".`);
+    return 1;
+  }
+  const adapter = adapterFor(venue);
+  const source = createCachedSource(values.fixture === '' ? 'synthetic' : values.fixture, {
+    venue: adapter.id,
+  });
+  const input = await adapter.parseInput(positionals[0]!, source.ctx);
 
   console.log(bold('M1 verification'));
   console.log(`${dim('source  ')} ${source.label}`);
   console.log(`${dim('address ')} ${cyan(input.address)}\n`);
 
-  const fills = await hyperliquidAdapter.fetchFills(input, undefined, source.ctx);
+  const fills = await adapter.fetchFills(input, undefined, source.ctx);
   if (fills.length === 0) {
     console.error(red('No fills for this address — nothing to verify.'));
     return 1;
@@ -157,8 +169,8 @@ pnpm verify:m1 <address> [--fixture <name>]
     from: Math.min(...fills.map((f) => f.ts)),
     to: Math.max(...fills.map((f) => f.ts)),
   };
-  const funding = (await hyperliquidAdapter.fetchFunding?.(input, range, source.ctx)) ?? [];
-  const episodes = buildEpisodes(fills, { venue: 'hyperliquid', funding });
+  const funding = (await adapter.fetchFunding?.(input, range, source.ctx)) ?? [];
+  const episodes = buildEpisodes(fills, { venue: adapter.id, funding });
 
   console.log(
     `${dim('fills')} ${fills.length}   ${dim('funding')} ${funding.length}   ${dim('episodes')} ${episodes.length}\n`,

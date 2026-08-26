@@ -524,3 +524,72 @@ describe('renderFrame — funding unavailable', () => {
     expect(texts(calls)).not.toContain('—');
   });
 });
+
+describe('renderFrame — notices stay readable', () => {
+  const LONG =
+    'Only positions that are open right now can be replayed. Polymarket Perps serves just ' +
+    'the current open cycle publicly, so a position that has already closed is unreachable ' +
+    'and cannot be replayed at all.';
+
+  it('never lets a notice run past the plot width', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      notices: [LONG],
+    });
+
+    // recordingContext measures 6px per character at any size.
+    const notice = calls
+      .filter((c) => c.op === 'fillText')
+      .map((c) => String(c.args[0]))
+      .find((t) => t.startsWith('! '));
+
+    expect(notice).toBeDefined();
+    expect(notice!.endsWith('…')).toBe(true);
+    expect(notice!.length * 6).toBeLessThanOrEqual(LAYOUT.width);
+  });
+
+  it('leaves a short notice untouched', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      notices: ['SYNTHETIC DATA'],
+    });
+
+    expect(texts(calls)).toContain('! SYNTHETIC DATA');
+  });
+
+  it('says how many notices it could not fit, rather than dropping them silently', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      notices: Array.from({ length: 12 }, (_, i) => `warning number ${i}`),
+    });
+
+    const notices = texts(calls).filter((t) => t.startsWith('! '));
+    expect(notices.length).toBeLessThan(12);
+    expect(notices.at(-1)).toMatch(/\(\+\d+ more\)/);
+  });
+
+  it('keeps notices clear of the stats values', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    renderFrame(ctx, frames[30]!, episode, series, createScale(), darkTheme, {
+      ...LAYOUT,
+      notices: [LONG, 'second', 'third'],
+    });
+
+    const drawn = calls
+      .filter((c) => c.op === 'fillText')
+      .map((c) => ({ text: String(c.args[0]), y: Number(c.args[2]) }));
+
+    const boughtValue = drawn.find((d) => d.text.startsWith('$') && d.text.includes(','));
+    const firstNotice = drawn.find((d) => d.text.startsWith('! '));
+
+    expect(firstNotice).toBeDefined();
+    if (boughtValue) expect(firstNotice!.y).toBeGreaterThan(boughtValue.y);
+  });
+});

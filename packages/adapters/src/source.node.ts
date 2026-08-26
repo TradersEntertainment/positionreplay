@@ -10,10 +10,13 @@
 
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import type { VenueId } from '@trade-replay/core';
 import { createUnlimitedLimiter } from './limiter.js';
-import type { AdapterContext, AdapterWarning, CandleCache, FillCache } from './types.js';
+import type { AdapterContext, AdapterWarning, CandleCache, FetchLike, FillCache } from './types.js';
 import { createFixtureFetch } from './hyperliquid/fixtureFetch.js';
 import { loadFixtureStore } from './hyperliquid/fixtureStore.node.js';
+import { createPerpsFixtureFetch } from './polymarket-perps/fixtureFetch.js';
+import { loadPerpsFixtureStore } from './polymarket-perps/fixtureStore.node.js';
 
 /**
  * Walk up for the workspace root.
@@ -34,15 +37,35 @@ export function findWorkspaceRoot(startFrom: string = process.cwd()): string {
   return resolve(startFrom);
 }
 
-export function fixturesRoot(): string {
+export function fixturesRoot(venue: VenueId = 'hyperliquid'): string {
   const override = process.env['TRADE_REPLAY_FIXTURES_DIR'];
-  if (override) return override;
-  return join(findWorkspaceRoot(), 'fixtures', 'hyperliquid');
+  if (override) return join(override, venue);
+  return join(findWorkspaceRoot(), 'fixtures', venue);
 }
 
-export function resolveFixtureDir(nameOrPath: string): string {
+export function resolveFixtureDir(nameOrPath: string, venue: VenueId = 'hyperliquid'): string {
   if (isAbsolute(nameOrPath) || nameOrPath.includes(sep)) return nameOrPath;
-  return join(fixturesRoot(), nameOrPath);
+  return join(fixturesRoot(venue), nameOrPath);
+}
+
+/**
+ * Fixture replay differs per venue: Hyperliquid routes on a POST body, Perps on a GET
+ * URL. Each adapter owns its own replay, so this only has to pick one.
+ */
+function fixtureFetchFor(venue: VenueId, dir: string): { fetch: FetchLike; warning?: string } {
+  if (venue === 'polymarket-perps') {
+    const store = loadPerpsFixtureStore(dir);
+    return {
+      fetch: createPerpsFixtureFetch(store),
+      ...(store.meta.warning ? { warning: store.meta.warning } : {}),
+    };
+  }
+
+  const store = loadFixtureStore(dir);
+  return {
+    fetch: createFixtureFetch(store),
+    ...(store.meta.warning ? { warning: store.meta.warning } : {}),
+  };
 }
 
 export interface DataSource {
@@ -78,6 +101,8 @@ export interface SourceCache {
 }
 
 export interface CreateSourceOptions {
+  /** Which venue this source serves. Defaults to Hyperliquid. */
+  venue?: VenueId;
   /**
    * SPEC §10's cache, injected.
    *
@@ -93,6 +118,7 @@ export interface CreateSourceOptions {
  * @param fixture Fixture name or path. Undefined means the live venue.
  */
 export function createSource(fixture?: string, options: CreateSourceOptions = {}): DataSource {
+  const venue = options.venue ?? 'hyperliquid';
   const warnings: AdapterWarning[] = [];
   const onWarning = (w: AdapterWarning): void => {
     warnings.push(w);
@@ -107,27 +133,28 @@ export function createSource(fixture?: string, options: CreateSourceOptions = {}
     return {
       ctx: { onWarning, ...cacheCtx },
       warnings,
-      label: 'live Hyperliquid API',
+      label: `live ${venue} API`,
       close: () => cache?.close(),
     };
   }
 
-  const dir = resolveFixtureDir(fixture);
+  const dir = resolveFixtureDir(fixture, venue);
   if (!existsSync(dir)) {
-    const available = existsSync(fixturesRoot()) ? readdirSync(fixturesRoot()).join(', ') : 'none';
+    const root = fixturesRoot(venue);
+    const available = existsSync(root) ? readdirSync(root).join(', ') : 'none';
     throw new Error(
-      `No fixture at ${dir}.\n` +
+      `No ${venue} fixture at ${dir}.\n` +
         `  Available: ${available}\n` +
-        `  Generate the synthetic one:  pnpm tsx scripts/make-synthetic-fixture.ts\n` +
-        `  Or record a real one:        pnpm capture:hl <address>`,
+        `  Generate a synthetic one:  pnpm tsx scripts/make-synthetic-fixture.ts (hyperliquid)\n` +
+        `                             pnpm tsx scripts/make-perps-fixture.ts (polymarket-perps)`,
     );
   }
 
-  const store = loadFixtureStore(dir);
+  const replay = fixtureFetchFor(venue, dir);
 
   return {
     ctx: {
-      fetch: createFixtureFetch(store),
+      fetch: replay.fetch,
       limiter: createUnlimitedLimiter(),
       sleep: async () => undefined,
       onWarning,
@@ -135,7 +162,7 @@ export function createSource(fixture?: string, options: CreateSourceOptions = {}
     },
     warnings,
     label: `fixture ${dir.replace(findWorkspaceRoot(), '').replace(/^[/\\]/, '')}`,
-    ...(store.meta.warning ? { provenanceWarning: store.meta.warning } : {}),
+    ...(replay.warning ? { provenanceWarning: replay.warning } : {}),
     close: () => cache?.close(),
   };
 }

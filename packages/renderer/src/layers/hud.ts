@@ -185,20 +185,55 @@ function drawStatsBar(ctx: Canvas2D, c: LayerContext): void {
 /**
  * Warnings drawn onto the image itself. An export leaves this process and gets posted
  * as fact; a caveat that lived only in the web UI would not travel with it.
+ *
+ * Which is exactly why they have to stay readable: a notice that overruns the canvas or
+ * overprints the stats row is barely better than no notice, and it corrupts the numbers
+ * underneath it as well.
  */
 function drawNotices(ctx: Canvas2D, c: LayerContext): void {
   const notices = c.layout.notices ?? [];
   if (notices.length === 0) return;
 
   const { unit, plot, bottomBar } = c.metrics;
-  const lineHeight = unit * 2;
-  const top = bottomBar.y0 + bottomBar.height - lineHeight * notices.length;
+  const lineHeight = unit * 1.9;
+  const noticeFont = font(c.theme, unit * 1.5);
 
-  notices.forEach((notice, index) => {
-    text(ctx, `! ${notice}`, plot.x0, top + lineHeight * index, {
+  // The band below the stats values, never into them.
+  const top = bottomBar.y0 + unit * 6;
+  const available = Math.max(lineHeight, c.layout.height - top);
+  const capacity = Math.max(1, Math.floor(available / lineHeight));
+
+  const shown = notices.slice(0, capacity);
+  const hidden = notices.length - shown.length;
+  // Never silently drop a caveat: say how many are not being shown.
+  if (hidden > 0 && shown.length > 0) {
+    shown[shown.length - 1] = `${shown[shown.length - 1]!} (+${hidden} more)`;
+  }
+
+  ctx.save();
+  ctx.font = noticeFont;
+  const lines = shown.map((notice) => ellipsize(ctx, `! ${notice}`, plot.width));
+  ctx.restore();
+
+  lines.forEach((line, index) => {
+    text(ctx, line, plot.x0, top + lineHeight * index, {
       color: c.theme.notice,
-      font: font(c.theme, unit * 1.5),
+      font: noticeFont,
       baseline: 'top',
     });
   });
+}
+
+/** Shorten to fit, with a binary search rather than a character-at-a-time walk. */
+function ellipsize(ctx: Canvas2D, content: string, maxWidth: number): string {
+  if (ctx.measureText(content).width <= maxWidth) return content;
+
+  let low = 0;
+  let high = content.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (ctx.measureText(`${content.slice(0, mid)}…`).width <= maxWidth) low = mid;
+    else high = mid - 1;
+  }
+  return `${content.slice(0, low).trimEnd()}…`;
 }

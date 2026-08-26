@@ -15,7 +15,7 @@ import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 import { GlobalFonts, createCanvas } from '@napi-rs/canvas';
-import { hyperliquidAdapter } from '@trade-replay/adapters';
+import { VENUE_LIMITATIONS, adapterFor, isSupportedVenue } from '@trade-replay/adapters';
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes, buildFrames, pickInterval, seriesRangeFor } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
@@ -86,6 +86,7 @@ async function main(): Promise<number> {
     args: process.argv.slice(2),
     allowPositionals: true,
     options: {
+      venue: { type: 'string' },
       fixture: { type: 'string' },
       episode: { type: 'string' },
       frame: { type: 'string' },
@@ -103,6 +104,7 @@ async function main(): Promise<number> {
     console.log(`
 pnpm render:still <address> [options]
 
+  --venue <v>         hyperliquid (default) or polymarket-perps
   --fixture [name]    Replay a recorded fixture instead of calling the venue
   --episode <i>       Episode index (default: largest absolute PnL)
   --frame <i>         Frame index (default: the final frame)
@@ -116,13 +118,21 @@ pnpm render:still <address> [options]
     return values.help ? 0 : 1;
   }
 
-  const source = createCachedSource(values.fixture === '' ? 'synthetic' : values.fixture);
-  const input = await hyperliquidAdapter.parseInput(positionals[0]!, source.ctx);
+  const venue = values.venue ?? 'hyperliquid';
+  if (!isSupportedVenue(venue)) {
+    console.error(`${red('Unknown venue')} "${venue}".`);
+    return 1;
+  }
+  const adapter = adapterFor(venue);
+  const source = createCachedSource(values.fixture === '' ? 'synthetic' : values.fixture, {
+    venue: adapter.id,
+  });
+  const input = await adapter.parseInput(positionals[0]!, source.ctx);
 
   console.log(`${dim('source  ')} ${source.label}`);
   console.log(`${dim('address ')} ${cyan(input.address)}`);
 
-  const fills = await hyperliquidAdapter.fetchFills(input, undefined, source.ctx);
+  const fills = await adapter.fetchFills(input, undefined, source.ctx);
   if (fills.length === 0) {
     console.error(red('No fills for this address — nothing to render.'));
     return 1;
@@ -132,13 +142,13 @@ pnpm render:still <address> [options]
     from: Math.min(...fills.map((f) => f.ts)),
     to: Math.max(...fills.map((f) => f.ts)),
   };
-  const funding = (await hyperliquidAdapter.fetchFunding?.(input, fillRange, source.ctx)) ?? [];
-  const episodes = buildEpisodes(fills, { venue: 'hyperliquid', funding });
+  const funding = (await adapter.fetchFunding?.(input, fillRange, source.ctx)) ?? [];
+  const episodes = buildEpisodes(fills, { venue: adapter.id, funding });
 
   const episode = pickEpisode(episodes, values.episode);
   const now = Date.now();
   const range = seriesRangeFor(episode, now);
-  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, hyperliquidAdapter.intervals, {
+  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, adapter.intervals, {
     ...(values.interval ? { override: values.interval } : {}),
   });
 
@@ -148,7 +158,7 @@ pnpm render:still <address> [options]
   );
   console.log(`${dim('interval')} ${picked.interval} ${dim(`(~${picked.count} bars)`)}`);
 
-  const series = await hyperliquidAdapter.fetchSeries(
+  const series = await adapter.fetchSeries(
     { instrument: episode.instrument, interval: picked.interval, from: range.from, to: range.to },
     source.ctx,
   );
@@ -174,7 +184,9 @@ pnpm render:still <address> [options]
 
   // Notices must reach the image itself, not just the terminal: an export is a
   // screenshot someone posts as fact (CLAUDE.md).
+  const limitation = VENUE_LIMITATIONS[adapter.id];
   const notices = [
+    ...(limitation ? [limitation] : []),
     ...source.warnings.map((w) => w.message),
     ...(picked.warning ? [picked.warning] : []),
     ...(source.provenanceWarning ? ['SYNTHETIC DATA — not a real position'] : []),
@@ -199,6 +211,9 @@ pnpm render:still <address> [options]
       watermark: 'trade-replay',
       interval: picked.interval,
       ...(values.leverage ? { leverage: Number(values.leverage) } : {}),
+      // The venue has no per-account funding to give (SPEC §4.4.2); a $0.00 in the
+      // exported image would assert that none was paid.
+      ...(adapter.fetchFunding ? {} : { fundingUnavailable: true }),
       ...(values['x-mode'] === 'fixed' ? { xMode: 'fixed' as const } : {}),
       ...(notices.length > 0 ? { notices } : {}),
     },
