@@ -72,22 +72,33 @@ a deployment that forgets it gets 503s from the worker, not an open door.
 | App Sleeping | **off** |
 | Restart Policy | On Failure, ~10 retries |
 
-### ffmpeg
-`apps/worker/nixpacks.toml` already asks for it:
+### ffmpeg — set this as a variable, not a file
 
-```toml
-[phases.setup]
-aptPkgs = ["ffmpeg"]
+Add to the worker service's variables:
+
+```
+NIXPACKS_APT_PKGS=ffmpeg
 ```
 
-If Railway ignores that file, give the service its own Dockerfile. `src/preflight.ts`
-checks for ffmpeg **and libx264** at boot and refuses to start without them — SPEC §15:
-"a render worker that silently can't render is worse than one that won't boot." A crash
-loop with `PREFLIGHT FAILED` in the log means the image lacks ffmpeg, not that the code
-is broken.
+**`apps/worker/nixpacks.toml` is not enough on its own, and this is the first thing
+that will bite you.** Nixpacks reads its config from the *build root*. Railway builds
+this repo from the root, so it looks for `/nixpacks.toml` and never sees the one in
+`apps/worker/` — that file only applies if the service's Root Directory is set to
+`apps/worker`, which would break the pnpm workspace install. The variable is
+per-service, so `web` does not carry an ffmpeg it has no use for.
+
+A root-level `nixpacks.toml` would work too, but it applies to every service built from
+this repo, which means shipping ffmpeg inside the web image as well.
+
+`src/preflight.ts` checks for ffmpeg **and libx264** at boot and refuses to start
+without them — SPEC §15: "a render worker that silently can't render is worse than one
+that won't boot." So a crash loop whose log says `PREFLIGHT FAILED ... spawnSync ffmpeg
+ENOENT` means exactly one thing: the image has no ffmpeg. It is not a code failure, and
+retrying the deploy without changing the image will reproduce it every time.
 
 ### Variables
 ```
+NIXPACKS_APT_PKGS=ffmpeg
 RENDER_TRANSPORT=http
 RENDER_WORKER_TOKEN=<the same value as web>
 WEB_URL=http://<web-service>.railway.internal:8080
@@ -154,5 +165,5 @@ services carry the same token.
 | Page renders unstyled, chunks 404 | `next start` used instead of the standalone server |
 | `cache: "unavailable"` in health | `DATABASE_URL` not pointing at the mounted volume |
 | MP4 stuck on "Queued" | worker cannot reach `WEB_URL`, or the tokens differ |
-| Worker crash loop, `PREFLIGHT FAILED` | no ffmpeg in the image |
+| Worker crash loop, `PREFLIGHT FAILED`, `spawnSync ffmpeg ENOENT` | `NIXPACKS_APT_PKGS=ffmpeg` not set on the worker service — the nixpacks.toml in `apps/worker/` is not read from a root build |
 | Downloads 410 "gone from disk" | `RENDER_OUTPUT_DIR` not on the volume, so it vanished on redeploy |

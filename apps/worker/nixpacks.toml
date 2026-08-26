@@ -1,9 +1,17 @@
-# SPEC §15.1 step 4: "Nixpacks won't install it."
-#
 # ffmpeg is the one system dependency this service has. @napi-rs/canvas ships prebuilt
 # binaries and needs none — that is why it was chosen over node-canvas.
 #
-# src/preflight.ts checks both at boot and refuses to start if either is missing, so a
-# broken image fails at deploy rather than on the first render someone requests.
+# CAUTION: Nixpacks reads its config from the BUILD ROOT. Railway builds this repo from
+# the root, so it looks for /nixpacks.toml and never reads this file. This applies only
+# when the build root is apps/worker — running `nixpacks build` here directly, or a
+# Railway service whose Root Directory is set to apps/worker (which would break the
+# pnpm workspace install).
+#
+# On Railway, set the variable instead, per service:
+#
+#     NIXPACKS_APT_PKGS=ffmpeg
+#
+# See docs/DEPLOY-RAILWAY.md. src/preflight.ts refuses to boot without ffmpeg and
+# libx264, so a missing one is a loud crash rather than a worker that cannot render.
 [phases.setup]
 aptPkgs = ["ffmpeg"]
