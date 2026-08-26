@@ -72,16 +72,20 @@ function drawIdentity(ctx: Canvas2D, c: LayerContext): void {
   // Direction + size. Leverage appears only if the host supplied it.
   const direction = episode.direction === 'long' ? 'LONG' : 'SHORT';
   const isFlat = Math.abs(frame.netSize) < 1e-9;
-  // Once the position is closed, "LONG 0.0000" is not a smaller position — it is no
-  // position. Say so, and show the size it reached rather than the size it now holds.
+  // "LONG 0.0000" is not a smaller position — it is no position, and it reads as a
+  // rendering fault. The replay is flat at two very different moments, so they are
+  // named differently: the lead-in before the entry, and after the exit.
   const closed = isFlat && episode.closedAt !== null && frame.t >= episode.closedAt;
+  const pending = isFlat && frame.t < episode.openedAt;
 
   const parts = closed
     ? [`${direction} CLOSED`, `PEAK ${compactSize(episode.peakSize)}`, `@ ${priceLabel(episode.avgEntry)}`]
-    : [
-        `${direction} ${compactSize(Math.abs(frame.netSize))}`,
-        frame.avgEntry > 0 ? `@ ${priceLabel(frame.avgEntry)}` : null,
-      ].filter((part): part is string => part !== null);
+    : pending
+      ? [`${direction} PENDING`]
+      : [
+          `${direction} ${compactSize(Math.abs(frame.netSize))}`,
+          frame.avgEntry > 0 ? `@ ${priceLabel(frame.avgEntry)}` : null,
+        ].filter((part): part is string => part !== null);
 
   if (layout.leverage !== undefined) parts.push(`${layout.leverage}x`);
 

@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/*
+ * SPEC §7.3: "It should look like a terminal, not a dashboard." The chart theme lives
+ * in packages/renderer/theme.ts; these tokens keep the surrounding page consistent
+ * with it so the canvas does not sit on a mismatched background.
+ */
+@theme {
+  --color-tr-bg: #08090b;
+  --color-tr-panel: #101318;
+  --color-tr-line: #1c2029;
+  --color-tr-text: #e6ebf2;
+  --color-tr-dim: #59616e;
+  --color-tr-up: #00d99a;
+  --color-tr-down: #ff4757;
+  --color-tr-notice: #ffa502;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body {
+  background: var(--color-tr-bg);
+  color: var(--color-tr-text);
+  font-family: var(--font-mono);
+}
+
+/* No rounded corners, no shadows (SPEC §7.3). */
+* {
+  border-radius: 0;
+}

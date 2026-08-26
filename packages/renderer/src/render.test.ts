@@ -302,6 +302,17 @@ describe('renderFrame — HUD honesty', () => {
     expect(beforeText('$0.00')).not.toBe(darkTheme.pnlUp);
   });
 
+  it('says PENDING during the lead-in, not a zero-size position', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    // SPEC §6.1 pads 15% of context before the entry, so the replay opens on frames
+    // where the position does not exist yet.
+    renderFrame(ctx, frames[3]!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    expect(texts(calls).some((t) => t.includes('LONG PENDING'))).toBe(true);
+    expect(texts(calls).some((t) => /LONG 0\.00/.test(t))).toBe(false);
+  });
+
   it('says CLOSED rather than reporting a zero-size position', () => {
     const { episode, series, frames } = scenario();
     const { ctx, calls } = recordingContext();
@@ -367,6 +378,29 @@ describe('renderFrame — theme and geometry', () => {
         expect(Number(call.args[1])).toBeLessThanOrEqual(width);
         expect(Number(call.args[2])).toBeLessThanOrEqual(height);
       }
+    }
+  });
+
+  it('never overprints one x-axis label on the next', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    // Early frames show a narrow window with a growing x-domain, which is where the
+    // tick step rounds down and produces more labels than there is room for.
+    renderFrame(ctx, frames[6]!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    // Axis labels are the fillText calls sitting below the plot area.
+    const axisLabels = calls
+      .filter((c) => c.op === 'fillText' && Number(c.args[2]) > LAYOUT.height * 0.75)
+      .map((c) => ({ text: String(c.args[0]), x: Number(c.args[1]) }))
+      .filter((entry) => /\d/.test(entry.text) && entry.text.includes(':'))
+      .sort((a, b) => a.x - b.x);
+
+    for (let i = 1; i < axisLabels.length; i++) {
+      const previous = axisLabels[i - 1]!;
+      const current = axisLabels[i]!;
+      // recordingContext measures 6px per character.
+      const previousRight = previous.x - (previous.text.length * 6) / 2 + previous.text.length * 6;
+      expect(current.x, `"${previous.text}" then "${current.text}"`).toBeGreaterThan(previousRight);
     }
   });
 

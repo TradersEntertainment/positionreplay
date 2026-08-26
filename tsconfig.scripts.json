@@ -1,7 +1,12 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // scripts/verify-m3.ts passes callbacks to page.evaluate, whose bodies execute
+    // inside the browser and legitimately touch document/HTMLCanvasElement. These are
+    // Node scripts otherwise; DOM usage anywhere else here would be a mistake that
+    // fails at runtime rather than at compile time.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["scripts/**/*.ts"]
 }

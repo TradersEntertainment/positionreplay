@@ -25,6 +25,11 @@ export function drawGrid(ctx: Canvas2D, c: LayerContext): void {
   const tickCount = Math.max(2, Math.floor(plot.width / (unit * 18)));
   const step = Math.max(1, Math.floor(c.xDomain / tickCount));
 
+  // Ticks are cheap and always drawn; labels are skipped when they would collide.
+  // Sizing alone is not enough — `step` rounds down, so it can yield more ticks than
+  // tickCount, and a long "31 Oct 11:00" label then overprints its neighbour.
+  let lastLabelRight = Number.NEGATIVE_INFINITY;
+
   for (let i = 0; i <= c.xDomain; i += step) {
     const t = c.times[Math.min(i, c.times.length - 1)];
     if (t === undefined) continue;
@@ -44,6 +49,11 @@ export function drawGrid(ctx: Canvas2D, c: LayerContext): void {
 
     const align = x - half < 0 ? 'left' : x + half > c.layout.width ? 'right' : 'center';
     const labelX = align === 'left' ? plot.x0 : align === 'right' ? c.layout.width - unit : x;
+    const labelLeft =
+      align === 'left' ? labelX : align === 'right' ? labelX - half * 2 : labelX - half;
+
+    if (labelLeft < lastLabelRight + unit) continue;
+    lastLabelRight = labelLeft + half * 2;
 
     text(ctx, label, labelX, plot.y1 + unit * 2.6, {
       color: theme.axisText,
