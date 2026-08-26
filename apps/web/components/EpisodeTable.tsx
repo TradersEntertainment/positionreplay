@@ -24,12 +24,12 @@ const COLUMNS: { key: SortKey; label: string; align: 'left' | 'right' }[] = [
   { key: 'pnl', label: 'NET', align: 'right' },
 ];
 
-function valueFor(episode: EpisodeSummary, key: SortKey, now: number): number {
+function valueFor(episode: EpisodeSummary, key: SortKey): number {
   switch (key) {
     case 'pnl':
       return episode.net;
     case 'duration':
-      return (episode.closedAt ?? now) - episode.openedAt;
+      return episode.durationMs;
     case 'size':
       return episode.peakSize;
     case 'date':
@@ -42,10 +42,11 @@ export function EpisodeTable({ episodes }: { episodes: EpisodeSummary[] }) {
   const [direction, setDirection] = useState<Direction>('desc');
 
   const sorted = useMemo(() => {
-    const now = Date.now();
+    // No `Date.now()` here on purpose: every value this sorts by is now fixed on the
+    // server, so the first client render produces the same order the server sent.
     const factor = direction === 'asc' ? 1 : -1;
     return [...episodes].sort((a, b) => {
-      const delta = valueFor(a, sortKey, now) - valueFor(b, sortKey, now);
+      const delta = valueFor(a, sortKey) - valueFor(b, sortKey);
       // Ties fall back to open time so the order is stable and reproducible.
       return delta !== 0 ? delta * factor : (a.openedAt - b.openedAt) * factor;
     });
@@ -103,7 +104,7 @@ export function EpisodeTable({ episodes }: { episodes: EpisodeSummary[] }) {
             data-net={episode.net}
             data-opened={episode.openedAt}
             data-peak={episode.peakSize}
-            data-duration={(episode.closedAt ?? Date.now()) - episode.openedAt}
+            data-duration={episode.durationMs}
           >
             <td className="p-2 font-bold">{episode.displayName}</td>
             <td

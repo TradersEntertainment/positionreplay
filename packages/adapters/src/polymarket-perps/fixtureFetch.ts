@@ -11,8 +11,16 @@ import type { FetchLike, HttpResponse } from '../types.js';
 export interface PerpsFixtureStore {
   instruments: unknown;
   portfolio: unknown;
-  /** Keyed by instrument id. */
+  /** Keyed by instrument id. The option-A endpoint. */
   positionFills: Map<number, unknown>;
+  /**
+   * `/v1/info/fills` pages, keyed by the cursor that asks for them.
+   *
+   * The first page is keyed by the empty string, since the first request carries no
+   * cursor. Recorded as several pages so a broken cursor walk fails here rather than in
+   * production against an account with more than one page of history.
+   */
+  history: Map<string, unknown>;
   /** Keyed `${instrumentId}-${interval}`. */
   klines: Map<string, unknown>;
   /** Keyed `${instrumentId}-1s`. */
@@ -23,6 +31,14 @@ export interface PerpsFixtureOptions {
   onRequest?: (path: string, params: URLSearchParams) => void;
   /** Force a status for one path, so error handling can be exercised. */
   failWith?: (path: string, params: URLSearchParams) => number | undefined;
+  /**
+   * Body for a forced failure.
+   *
+   * The venue's error handling reads the body, not just the status: a 400 carrying
+   * `{"error":"account not found"}` means a wrong address space and gets its own
+   * message. A test that could only set the status could not reach that branch.
+   */
+  body?: (path: string, params: URLSearchParams) => string;
 }
 
 function ok(data: unknown): HttpResponse {
@@ -63,7 +79,9 @@ export function createPerpsFixtureFetch(
     options.onRequest?.(path, params);
 
     const forced = options.failWith?.(path, params);
-    if (forced !== undefined) return fail(forced, `fixture forced ${forced} for ${path}`);
+    if (forced !== undefined) {
+      return fail(forced, options.body?.(path, params) ?? `fixture forced ${forced} for ${path}`);
+    }
 
     if (path === '/v1/info/instruments') return ok(store.instruments);
     if (path === '/v1/info/public-portfolio') return ok(store.portfolio);
@@ -71,6 +89,17 @@ export function createPerpsFixtureFetch(
     if (path === '/v1/info/position-fills') {
       const id = Number(params.get('instrument_id'));
       return ok(store.positionFills.get(id) ?? []);
+    }
+
+    if (path === '/v1/info/fills') {
+      const cursor = params.get('cursor') ?? '';
+      const page = store.history.get(cursor);
+      // An unrecorded cursor is a bug in the walk, not an empty history — returning an
+      // empty page would let it pass as "the account has nothing older".
+      if (page === undefined) {
+        return fail(404, `Fixture has no /v1/info/fills page for cursor "${cursor}"`);
+      }
+      return ok(page);
     }
 
     const start = Number(params.get('start_timestamp') ?? 0);

@@ -41,7 +41,13 @@ export type AdapterWarningKind =
   | 'pagination_collision'
   /** A funding amount is derived from public rates, not the account's charges. */
   | 'estimated_funding'
-  /** SPEC §4.4.1 option A: only the current open cycle is retrievable on Perps. */
+  /**
+   * SPEC §4.4.1 option A: only the current open cycle is retrievable on Perps.
+   *
+   * No longer raised — `/v1/info/fills` turned out to serve the full history publicly,
+   * so closed Perps positions are replayable after all. Kept because the option-A path
+   * is still in the adapter and would raise it again if anyone switched back.
+   */
   | 'perps_open_positions_only'
   /** The account holds an instrument missing from the venue's own instrument list. */
   | 'unknown_instrument'
@@ -316,6 +322,28 @@ export class HistoryTooOldError extends Error {
 }
 
 /** Thrown when input cannot be resolved to an address. SPEC §11 case 10. */
+/**
+ * The venue has never seen this account.
+ *
+ * Distinct from "no positions" on purpose. Polymarket keeps two address spaces: the
+ * proxy wallet a profile page shows, and the address Perps actually trades under.
+ * Probing both live, the proxy wallet returns `400 {"error":"account not found"}` while
+ * the Perps address returns 200 with a full history. SPEC §4.5: "Do not ship a resolver
+ * that silently returns 'no positions' for a valid trader — that reads as a bug in our
+ * app, not as an address mismatch." An empty replay would be exactly that bug; this is
+ * the sentence that tells someone what actually happened.
+ */
+export class UnknownAccountError extends Error {
+  constructor(
+    readonly venue: string,
+    readonly address: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'UnknownAccountError';
+  }
+}
+
 export class InvalidInputError extends Error {
   constructor(message: string) {
     super(message);

@@ -8,7 +8,12 @@
 
 import type { z } from 'zod';
 import { createTokenBucket } from '../limiter.js';
-import { HistoryTooOldError, HttpError, VenueUnreachableError } from '../types.js';
+import {
+  HistoryTooOldError,
+  HttpError,
+  UnknownAccountError,
+  VenueUnreachableError,
+} from '../types.js';
 import type { AdapterContext, FetchLike, RateLimiter } from '../types.js';
 import { withRetry } from '../withRetry.js';
 import { PerpsContractError, parsePerps } from './schemas.js';
@@ -25,6 +30,12 @@ export const PM_WEIGHTS = {
   refillPerMinute: 600,
   /** §4.4.4: weight 10, dropping to 1 when served from its 2s cache. */
   positionFills: 10,
+  /**
+   * `/v1/info/fills`. SPEC §4.4.4 does not price this endpoint, so it is charged as
+   * `position-fills` — the closest documented neighbour, and the conservative guess.
+   * Under-charging a bucket costs a 429 for the user; over-charging costs a small wait.
+   */
+  fills: 10,
   instruments: 5,
   portfolio: 5,
   klines: 2,
@@ -122,6 +133,17 @@ export function createPerpsClient(
             // or reporting it as a generic failure sends people looking for a bug.
             if (response.status === 413) {
               throw new HistoryTooOldError(`${url} returned 413.`);
+            }
+            // A wrong address space, not a broken account. See UnknownAccountError.
+            if (response.status === 400 && /account not found/i.test(text)) {
+              throw new UnknownAccountError(
+                'polymarket-perps',
+                String(params['address'] ?? ''),
+                `Polymarket Perps has no account at ${String(params['address'] ?? 'that address')}. ` +
+                  `Perps uses a different address from the one a Polymarket profile page shows: a ` +
+                  `profile URL carries the proxy wallet, and the Perps API rejects it outright. ` +
+                  `Open the trader's Perps page and use the address it reports there.`,
+              );
             }
             throw new HttpError(
               response.status,

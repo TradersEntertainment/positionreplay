@@ -1,0 +1,60 @@
+{
+  "data": [
+    {
+      "trade_id": "5007",
+      "order_id": "35049",
+      "instrument_id": 1,
+      "side": "short",
+      "price": "84200.0",
+      "quantity": "0.4000",
+      "taker": true,
+      "fee": "13.472000",
+      "fee_asset": "pUSD",
+      "previous_size": "0.8000",
+      "previous_entry_price": "91062.5",
+      "pnl": "-2745.000000",
+      "timestamp": 1787292000000,
+      "liquidation": true,
+      "adl": false,
+      "hash": "0xpm138ffixture"
+    },
+    {
+      "trade_id": "5006",
+      "order_id": "35042",
+      "instrument_id": 2,
+      "side": "short",
+      "price": "3310.00",
+      "quantity": "2.000",
+      "taker": true,
+      "fee": "2.648000",
+      "fee_asset": "pUSD",
+      "previous_size": "-4.000",
+      "previous_entry_price": "3150.00",
+      "pnl": "0.000000",
+      "timestamp": 1787277600000,
+      "liquidation": false,
+      "adl": false,
+      "hash": "0xpm138efixture"
+    },
+    {
+      "trade_id": "5005",
+      "order_id": "35035",
+      "instrument_id": 3,
+      "side": "short",
+      "price": "196.800",
+      "quantity": "65.00",
+      "taker": true,
+      "fee": "5.116800",
+      "fee_asset": "pUSD",
+      "previous_size": "65.00",
+      "previous_entry_price": "175.650",
+      "pnl": "1374.750000",
+      "timestamp": 1787252400000,
+      "liquidation": false,
+      "adl": false,
+      "hash": "0xpm138dfixture"
+    }
+  ],
+  "more": true,
+  "cursor": "cursor-1"
+}

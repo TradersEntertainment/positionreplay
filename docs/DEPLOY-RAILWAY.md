@@ -201,7 +201,8 @@ services carry the same token.
   dialect swap.
 - **No object storage.** MP4s live on the volume. SPEC §9 Phase 2 ends at "presigned
   URL"; `/api/render/<id>/file` is standing in for that.
-- **No Perps poller.** That is §4.4.1 option C, and the adapter runs option A.
+- **No Perps poller.** That is §4.4.1 option C. The adapter reads the venue's own
+  history endpoint instead, which covers closed positions without one.
 
 ## Known first-deploy failures
 

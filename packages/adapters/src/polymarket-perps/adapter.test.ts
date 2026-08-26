@@ -3,7 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { buildEpisodes, pickInterval } from '@trade-replay/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUnlimitedLimiter } from '../limiter.js';
-import { HistoryTooOldError, InvalidInputError, SeriesUnavailableError } from '../types.js';
+import {
+  HistoryTooOldError,
+  InvalidInputError,
+  SeriesUnavailableError,
+  UnknownAccountError,
+} from '../types.js';
 import type { AdapterContext, AdapterWarning } from '../types.js';
 import { createPerpsFixtureFetch } from './fixtureFetch.js';
 import { loadPerpsFixtureStore } from './fixtureStore.node.js';
@@ -54,50 +59,122 @@ describe('parseInput (SPEC §4.5)', () => {
   });
 });
 
-describe('fetchFills — option A (SPEC §4.4.1)', () => {
-  it('reads the open positions from the portfolio, then their cycles', async () => {
-    const seen: string[] = [];
+describe('fetchFills — full history (/v1/info/fills)', () => {
+  it('walks the cursor to the end of the history', async () => {
+    const seen: { path: string; cursor: string | null }[] = [];
     const fills = await polymarketPerpsAdapter.fetchFills(INPUT, undefined, {
+      ...ctx({
+        fetch: createPerpsFixtureFetch(store, {
+          onRequest: (path, params) => seen.push({ path, cursor: params.get('cursor') }),
+        }),
+      }),
+    });
+
+    const pages = seen.filter((r) => r.path === '/v1/info/fills');
+    // The fixture is three pages. One request would mean `more` was ignored and most of
+    // the account's history silently dropped — which is exactly how a replay ends up
+    // showing a position that appears to open out of nowhere.
+    expect(pages).toHaveLength(3);
+    expect(pages[0]!.cursor).toBeNull();
+    expect(pages.slice(1).map((r) => r.cursor)).toEqual(['cursor-1', 'cursor-2']);
+    expect(fills).toHaveLength(8);
+  });
+
+  it('does not read the portfolio at all', async () => {
+    // The old option-A path started there. If it comes back, a closed position becomes
+    // invisible again without a single test failing on the numbers.
+    const seen: string[] = [];
+    await polymarketPerpsAdapter.fetchFills(INPUT, undefined, {
       ...ctx({ fetch: createPerpsFixtureFetch(store, { onRequest: (p) => seen.push(p) }) }),
     });
 
-    expect(seen).toContain('/v1/info/public-portfolio');
-    expect(seen.filter((p) => p === '/v1/info/position-fills')).toHaveLength(2);
-    expect(fills.length).toBeGreaterThan(0);
+    expect(seen).not.toContain('/v1/info/public-portfolio');
+    expect(seen).not.toContain('/v1/info/position-fills');
   });
 
-  it('always warns that only open positions are retrievable', async () => {
-    const warnings: AdapterWarning[] = [];
-    await polymarketPerpsAdapter.fetchFills(INPUT, undefined, ctx({ onWarning: (w) => warnings.push(w) }));
-
-    // The limitation is the product's, not the user's mistake — it has to be stated
-    // every time, not only when the result is empty.
-    expect(warnings.map((w) => w.kind)).toContain('perps_open_positions_only');
+  it('returns fills oldest first, whatever order the venue sends', async () => {
+    // The venue answers `sort=desc`. §5's fold is a running position, so reading it
+    // backwards produces a different and wrong answer rather than an obvious error.
+    const fills = await polymarketPerpsAdapter.fetchFills(INPUT, undefined, ctx());
+    for (let i = 1; i < fills.length; i++) {
+      expect(fills[i]!.ts).toBeGreaterThanOrEqual(fills[i - 1]!.ts);
+    }
   });
 
-  it('says so plainly when the account is flat', async () => {
-    const warnings: AdapterWarning[] = [];
-    const empty = { ...store, portfolio: { positions: [] } };
+  it('stops paging when a page repeats its cursor', async () => {
+    // A cursor that does not advance is the one shape that pages forever. `more` says
+    // to keep going, so only the repeat detects it.
+    const stuck = new Map(store.history);
+    stuck.set('', { data: [], more: true, cursor: '' });
     const fills = await polymarketPerpsAdapter.fetchFills(INPUT, undefined, {
-      ...ctx({ fetch: createPerpsFixtureFetch(empty), onWarning: (w) => warnings.push(w) }),
+      ...ctx({ fetch: createPerpsFixtureFetch({ ...store, history: stuck }) }),
     });
 
     expect(fills).toEqual([]);
-    expect(warnings[0]!.message).toMatch(/cannot be replayed at all/);
+  });
+
+  it('honours a time range without paging to the beginning of time', async () => {
+    const all = await polymarketPerpsAdapter.fetchFills(INPUT, undefined, ctx());
+    const from = all[all.length - 2]!.ts;
+
+    const seen: string[] = [];
+    const recent = await polymarketPerpsAdapter.fetchFills(
+      INPUT,
+      { from, to: Number.MAX_SAFE_INTEGER },
+      { ...ctx({ fetch: createPerpsFixtureFetch(store, { onRequest: (p) => seen.push(p) }) }) },
+    );
+
+    expect(recent.every((f) => f.ts >= from)).toBe(true);
+    // A descending walk that has already passed `from` can only go further back.
+    expect(seen.filter((p) => p === '/v1/info/fills').length).toBeLessThan(3);
   });
 
   it('warns rather than crashing on an instrument missing from the venue list', async () => {
     const warnings: AdapterWarning[] = [];
-    const odd = {
-      ...store,
-      portfolio: { positions: [{ instrument_id: 999, size: '1.0' }] },
-    };
+    const odd = new Map(store.history);
+    odd.set('', {
+      data: [
+        {
+          trade_id: '1',
+          instrument_id: 999,
+          side: 'long',
+          price: '1',
+          quantity: '1',
+          fee: '0',
+          timestamp: 1,
+          previous_size: '0',
+          previous_entry_price: '0',
+        },
+      ],
+      more: false,
+    });
+
     const fills = await polymarketPerpsAdapter.fetchFills(INPUT, undefined, {
-      ...ctx({ fetch: createPerpsFixtureFetch(odd), onWarning: (w) => warnings.push(w) }),
+      ...ctx({
+        fetch: createPerpsFixtureFetch({ ...store, history: odd }),
+        onWarning: (w) => warnings.push(w),
+      }),
     });
 
     expect(fills).toEqual([]);
     expect(warnings.map((w) => w.kind)).toContain('unknown_instrument');
+  });
+
+  it('explains a wrong address space instead of reporting an empty account', async () => {
+    // SPEC §4.5: "Do not ship a resolver that silently returns 'no positions' for a
+    // valid trader — that reads as a bug in our app, not as an address mismatch."
+    // Probed live, a Polymarket proxy wallet gets exactly this 400 from Perps.
+    const fetchNotFound = createPerpsFixtureFetch(store, {
+      failWith: (path) => (path === '/v1/info/fills' ? 400 : undefined),
+      body: () => JSON.stringify({ status: 'err', error: 'account not found' }),
+    });
+
+    await expect(
+      polymarketPerpsAdapter.fetchFills(INPUT, undefined, ctx({ fetch: fetchNotFound })),
+    ).rejects.toThrow(UnknownAccountError);
+    await expect(
+      polymarketPerpsAdapter.fetchFills(INPUT, undefined, ctx({ fetch: fetchNotFound })),
+    ).rejects.toThrow(/proxy wallet/);
   });
 });
 
@@ -140,12 +217,16 @@ describe('the previous_size oracle', () => {
     expect(episodes.flatMap((e) => e.reconciliation)).toHaveLength(0);
   });
 
-  it('leaves every episode open, because that is all option A can see', async () => {
+  it('reconstructs a position that has already closed', async () => {
+    // The whole point of moving off option A. Under it this episode did not exist at
+    // all: `position-fills` serves only the current open cycle.
     const fills = await polymarketPerpsAdapter.fetchFills(INPUT, undefined, ctx());
     const episodes = buildEpisodes(fills, { venue: 'polymarket-perps' });
 
-    expect(episodes.length).toBeGreaterThanOrEqual(2);
-    for (const episode of episodes) expect(episode.closedAt).toBeNull();
+    const closed = episodes.filter((e) => e.closedAt !== null);
+    expect(closed.length).toBeGreaterThan(0);
+    expect(closed[0]!.instrument).toContain('pm:');
+    expect(episodes.some((e) => e.closedAt === null)).toBe(true);
   });
 
   it('surfaces the liquidation flag through to the episode', async () => {
@@ -213,7 +294,7 @@ describe('error handling (SPEC §4.4.4)', () => {
   it('treats 413 as history too old, not a generic failure', async () => {
     // §4.4.1: "Handle 413 as 'history too old', not as a generic failure."
     const fetch = createPerpsFixtureFetch(store, {
-      failWith: (path) => (path === '/v1/info/position-fills' ? 413 : undefined),
+      failWith: (path) => (path === '/v1/info/fills' ? 413 : undefined),
     });
 
     await expect(
@@ -225,7 +306,7 @@ describe('error handling (SPEC §4.4.4)', () => {
     let calls = 0;
     const fetch = createPerpsFixtureFetch(store, {
       failWith: (path) => {
-        if (path !== '/v1/info/position-fills') return undefined;
+        if (path !== '/v1/info/fills') return undefined;
         calls++;
         return 413;
       },

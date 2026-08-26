@@ -18,8 +18,8 @@
     "hash": "0xpm1388fixture"
   },
   {
-    "trade_id": "5002",
-    "order_id": "35014",
+    "trade_id": "5004",
+    "order_id": "35028",
     "instrument_id": 1,
     "side": "long",
     "price": "89500.0",
@@ -33,11 +33,11 @@
     "timestamp": 1787234400000,
     "liquidation": false,
     "adl": false,
-    "hash": "0xpm138afixture"
+    "hash": "0xpm138cfixture"
   },
   {
-    "trade_id": "5004",
-    "order_id": "35028",
+    "trade_id": "5007",
+    "order_id": "35049",
     "instrument_id": 1,
     "side": "short",
     "price": "84200.0",
@@ -51,6 +51,6 @@
     "timestamp": 1787292000000,
     "liquidation": true,
     "adl": false,
-    "hash": "0xpm138cfixture"
+    "hash": "0xpm138ffixture"
   }
 ]

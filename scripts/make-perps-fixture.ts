@@ -5,9 +5,14 @@
  * adapter's code paths run offline, but the numbers are invented and prove nothing
  * about the live contract. Real recordings come from `pnpm capture:pm`.
  *
- * It models option A — one account with two positions still OPEN — because that is the
- * only thing the public Perps API can serve (SPEC §4.4.1). One of them was force-closed
- * partway by a liquidation, so the §4.4.3 marker has something to draw.
+ * It models what `/v1/info/fills` actually serves: the account's whole history. Two
+ * positions are still open (one of them force-closed partway by a liquidation, so the
+ * §4.4.3 marker has something to draw) and a third has been opened and fully closed —
+ * which is the case the option-A path could never produce and the whole reason this
+ * fixture was regenerated.
+ *
+ * The history is written as several small pages so the adapter's cursor walk is really
+ * exercised. A single-page fixture would let a broken pagination loop pass.
  *
  * Run: pnpm tsx scripts/make-perps-fixture.ts
  */
@@ -51,7 +56,11 @@ const TAKER_FEE = 0.0004;
 const INSTRUMENTS = [
   { instrument_id: 1, symbol: 'BTC-PERP', quantity_decimals: 4, price_decimals: 1, category: 'crypto', base_asset: 'BTC', quote_asset: 'pUSD', funding_interval: 3_600_000, max_leverage: 20, isolated_only: false },
   { instrument_id: 2, symbol: 'ETH-PERP', quantity_decimals: 3, price_decimals: 2, category: 'crypto', base_asset: 'ETH', quote_asset: 'pUSD', funding_interval: 3_600_000, max_leverage: 20, isolated_only: false },
+  { instrument_id: 3, symbol: 'SOL-PERP', quantity_decimals: 2, price_decimals: 3, category: 'crypto', base_asset: 'SOL', quote_asset: 'pUSD', funding_interval: 3_600_000, max_leverage: 20, isolated_only: false },
 ];
+
+/** Fills to a page of `/v1/info/fills`. Small on purpose — see the header comment. */
+const HISTORY_PAGE = 3;
 
 interface Leg {
   instrument_id: number;
@@ -64,15 +73,18 @@ interface Leg {
 }
 
 /**
- * Both cycles end still open, which is what option A can retrieve. BTC scales in and
- * takes a partial liquidation; ETH is a plain short.
+ * BTC scales in and takes a partial liquidation; ETH is a plain short; both end open.
+ * SOL opens and closes completely, which is the case `/v1/info/fills` made reachable.
  */
 const LEGS: Leg[] = [
   { instrument_id: 1, hours: 0, side: 'long', price: 92_000, quantity: 0.5 },
-  { instrument_id: 1, hours: 14, side: 'long', price: 89_500, quantity: 0.3 },
-  { instrument_id: 1, hours: 30, side: 'short', price: 84_200, quantity: 0.4, liquidation: true },
+  { instrument_id: 3, hours: 2, side: 'long', price: 178.4, quantity: 40 },
   { instrument_id: 2, hours: 6, side: 'short', price: 3_150, quantity: 4 },
+  { instrument_id: 3, hours: 11, side: 'long', price: 171.25, quantity: 25 },
+  { instrument_id: 1, hours: 14, side: 'long', price: 89_500, quantity: 0.3 },
+  { instrument_id: 3, hours: 19, side: 'short', price: 196.8, quantity: 65 },
   { instrument_id: 2, hours: 26, side: 'short', price: 3_310, quantity: 2 },
+  { instrument_id: 1, hours: 30, side: 'short', price: 84_200, quantity: 0.4, liquidation: true },
 ];
 
 interface PmFillOut {
@@ -229,7 +241,9 @@ const { fills, finalSizes } = buildFills();
 console.log('Generating synthetic Polymarket Perps fixture into fixtures/polymarket-perps/synthetic');
 write('instruments.json', INSTRUMENTS);
 
-// Option A: the portfolio reports only what is still open, and that is the entry point.
+// Still written, and still true: the portfolio reports what is open right now. It is no
+// longer the entry point — the history endpoint is — but the option-A path still reads
+// it, and a fixture that only serves the new path would hide a regression in the old one.
 write('portfolio.json', {
   equity: '128400.500000',
   positions: [...finalSizes.entries()]
@@ -240,6 +254,22 @@ write('portfolio.json', {
       entry_price: s.entry.toFixed(2),
     })),
 });
+
+/**
+ * The history endpoint: newest first, in pages, each naming the cursor for the next.
+ *
+ * The last page carries `more: false` and no cursor, which is how the walk terminates.
+ */
+const descending = [...fills].sort((a, b) => b.timestamp - a.timestamp);
+for (let start = 0, page = 0; start < descending.length; start += HISTORY_PAGE, page++) {
+  const slice = descending.slice(start, start + HISTORY_PAGE);
+  const more = start + HISTORY_PAGE < descending.length;
+  write(page === 0 ? 'fills/first.json' : `fills/cursor-${page}.json`, {
+    data: slice,
+    more,
+    ...(more ? { cursor: `cursor-${page + 1}` } : {}),
+  });
+}
 
 for (const instrument of INSTRUMENTS) {
   write(
@@ -258,9 +288,10 @@ write('meta.json', {
     'These numbers are invented. They are shaped like documented Polymarket Perps responses ' +
     'so the adapter code paths are exercised offline, but they prove nothing about the live ' +
     'venue contract. Real recordings come from `pnpm capture:pm`.',
-  mode: 'A — open positions only (SPEC §4.4.1)',
+  mode: 'full history via /v1/info/fills; portfolio + position-fills also recorded',
   address: ADDRESS,
   fillCount: fills.length,
+  historyPages: Math.ceil(fills.length / HISTORY_PAGE),
   openPositions: [...finalSizes.values()].filter((s) => Math.abs(s.size) > 1e-9).length,
 });
 

@@ -48,7 +48,7 @@ export const VENUE_LABELS: Record<string, string> = {
 /**
  * A limitation the user must see before reading any numbers, or null.
  *
- * SPEC §4.4.1 option A: "Label it in the UI." This is that label, kept next to the
+ * SPEC §4.4.1: "Label it in the UI." This is that label, kept next to the
  * adapter list so a new venue cannot quietly ship without one.
  *
  * The title travels with the detail rather than being written at each call site: the
@@ -64,11 +64,12 @@ export interface VenueLimitation {
 export const VENUE_LIMITATIONS: Record<string, VenueLimitation | null> = {
   hyperliquid: null,
   'polymarket-perps': {
-    title: 'Open positions only',
+    title: 'Funding is not included',
     detail:
-      'Only positions that are open right now can be replayed. Polymarket Perps serves ' +
-      'just the current open cycle publicly, so a position that has already closed is ' +
-      'unreachable and cannot be replayed at all.',
+      "Polymarket Perps serves funding rates publicly but not this account's own funding " +
+      'charges, so the HUD shows funding as unavailable rather than as zero. Note also ' +
+      'that Perps uses a different address from the one a Polymarket profile page shows: ' +
+      'a profile URL carries the proxy wallet, which this API rejects outright.',
   },
   csv: {
     title: 'Prices are not from your venue',

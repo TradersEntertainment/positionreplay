@@ -109,6 +109,31 @@ export const PmFillsSchema = z.union([
 ]);
 
 /**
+ * `/v1/info/fills` — the account's whole trade history, one page at a time.
+ *
+ * Verified against the live endpoint rather than assumed (CLAUDE.md: "Never guess at a
+ * venue's API contract"). It is public: a plain cross-origin `fetch` with no
+ * `Authorization` header and no cookies returns 200 and 100 records. That is what makes
+ * a *closed* Perps position replayable, which the open-positions-only path this
+ * replaced could never do.
+ *
+ * `cursor` is opaque and is fed back as the `cursor` query parameter — checked by
+ * paging with each of `cursor`, `next_cursor`, `after` and `offset` against a live
+ * account, where only `cursor` returned a different first `trade_id`. `limit` is
+ * accepted and ignored; every page came back with 100 rows.
+ *
+ * Optional even though the live response carries both, because a final page that
+ * omitted them should end the walk rather than fail the whole replay.
+ */
+export const PmFillHistorySchema = z.object({
+  data: z.array(PmFillSchema).default([]),
+  more: z.boolean().optional(),
+  cursor: z.string().optional(),
+});
+
+export type PmFillHistory = z.infer<typeof PmFillHistorySchema>;
+
+/**
  * SPEC §4.4.2 `/v1/info/public-portfolio`: "Equity + **open** positions only".
  *
  * In option A this is the entry point: it names which instruments the account has open,

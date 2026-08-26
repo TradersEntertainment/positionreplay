@@ -1,11 +1,22 @@
 /**
  * Polymarket Perps adapter. SPEC.md §4.4.
  *
- * **Option A — open positions only.** CLAUDE.md records A as the default, SPEC §4.4.1
- * recommends it and §12 M6 names it. The consequence is stark and is surfaced, not
- * buried: `/v1/info/position-fills` serves only the account's *current open cycle*, so
- * once a Perps position closes its history is unreachable and it can never be replayed.
- * A closed Hyperliquid trade is replayable forever; a closed Perps trade is not.
+ * **Full history, not option A.** This was built as SPEC §4.4.1's option A — open
+ * positions only, via `/v1/info/position-fills`, which serves just the account's current
+ * open cycle. That made a closed Perps position permanently unreplayable, and the whole
+ * app said so.
+ *
+ * It turned out not to be true. `/v1/info/fills` serves the account's entire trade
+ * history, publicly: probed live against a real account, a cross-origin `fetch` with no
+ * `Authorization` header and no cookies returns 200 and pages of records — including
+ * `liquidation`, `adl`, `previous_size` and `previous_entry_price`. Option A was chosen
+ * on the belief that no such endpoint existed, so the belief is what changed, not the
+ * judgement. CLAUDE.md: "Never guess at a venue's API contract... check against the live
+ * endpoint before building on it." That check is what produced this.
+ *
+ * `position-fills` is still here, unused by the default path but kept in the fixture and
+ * the schemas: it is the endpoint SPEC actually documents, and dropping it would make
+ * going back to option A a rewrite rather than a switch.
  *
  * Read-only and unauthenticated, like the Hyperliquid adapter. The endpoints used here
  * are the ones §4.4.1's table marks `security: []`.
@@ -25,7 +36,11 @@ import { InvalidInputError, SeriesUnavailableError } from '../types.js';
 import { PM_WEIGHTS, createPerpsClient } from './client.js';
 import { loadInstruments } from './instruments.js';
 import { instrumentIdFor, mapKlines, mapMarkHistory, mapPerpsFill } from './map.js';
-import { PmFillsSchema, PmKlinesSchema, PmMarkHistorySchema, PmPortfolioSchema } from './schemas.js';
+import {
+  PmFillHistorySchema,
+  PmKlinesSchema,
+  PmMarkHistorySchema,
+} from './schemas.js';
 
 export { PM_PERPS_API_BASE, PM_WEIGHTS } from './client.js';
 export * from './map.js';
@@ -108,10 +123,15 @@ async function parseInput(raw: string, ctx?: AdapterContext): Promise<AdapterInp
 }
 
 /**
- * Fills for every position the account currently has open. SPEC §4.4.1 option A.
+ * Every fill the account has ever made, walked page by page.
  *
- * Two calls deep by necessity: the portfolio names which instruments are open, and only
- * those have a retrievable cycle.
+ * The venue returns newest-first and ignores `limit`; each page carries `more` and an
+ * opaque `cursor` that is fed back as the `cursor` query parameter. Which parameter name
+ * that is was settled by paging a live account with each of `cursor`, `next_cursor`,
+ * `after` and `offset` — only `cursor` advanced the page.
+ *
+ * Fills come back descending and are sorted ascending here, because §5's fold is a
+ * running position and reading it backwards produces a different, wrong answer.
  */
 async function fetchFills(
   input: AdapterInput,
@@ -121,65 +141,70 @@ async function fetchFills(
   const client = createPerpsClient(ctx);
   const instruments = await loadInstruments(ctx);
 
-  const portfolio = await client.get(
-    '/v1/info/public-portfolio',
-    { address: input.address },
-    PmPortfolioSchema,
-    'public-portfolio',
-    PM_WEIGHTS.portfolio,
-  );
-
-  const open = portfolio.positions.filter((position) => position.size !== 0);
-
-  if (open.length === 0) {
-    warn(ctx, {
-      kind: 'perps_open_positions_only',
-      message:
-        `This account has no open Perps positions. Polymarket Perps only serves the ` +
-        `current open cycle, so positions that have already closed cannot be replayed at all.`,
-      detail: { address: input.address },
-    });
-    return [];
-  }
-
   const fills: Fill[] = [];
+  const unknownInstruments = new Set<number>();
+  let cursor: string | undefined;
+  let pages = 0;
+  let truncated = false;
 
-  for (const position of open) {
-    const instrument = instruments.byId.get(position.instrument_id);
-    if (!instrument) {
-      warn(ctx, {
-        kind: 'unknown_instrument',
-        message:
-          `The account holds instrument ${position.instrument_id}, which is not in the ` +
-          `venue's instrument list. Its position cannot be reconstructed.`,
-        detail: { instrumentId: position.instrument_id },
-      });
-      continue;
-    }
-
-    const raw = await client.get(
-      '/v1/info/position-fills',
-      { address: input.address, instrument_id: position.instrument_id },
-      PmFillsSchema,
-      'position-fills',
-      PM_WEIGHTS.positionFills,
+  for (; pages < MAX_PAGES; pages++) {
+    const response = await client.get(
+      '/v1/info/fills',
+      { address: input.address, sort: 'desc', ...(cursor === undefined ? {} : { cursor }) },
+      PmFillHistorySchema,
+      'fills',
+      PM_WEIGHTS.fills,
     );
 
-    for (const trade of raw) {
+    for (const trade of response.data) {
+      const instrument = instruments.byId.get(trade.instrument_id);
+      if (!instrument) {
+        unknownInstruments.add(trade.instrument_id);
+        continue;
+      }
       const fill = mapPerpsFill(trade, instrument);
       if (range && (fill.ts < range.from || fill.ts > range.to)) continue;
       fills.push(fill);
     }
+
+    // A descending walk that has passed the start of the range will only go further
+    // back, so stop rather than paging through years to reach an empty tail.
+    const oldest = response.data.at(-1)?.timestamp;
+    if (range && oldest !== undefined && oldest < range.from) break;
+
+    if (!response.more || response.data.length === 0) break;
+
+    // A cursor that does not move is the one failure that would page forever. Treat it
+    // as the end of the history rather than trusting `more`.
+    if (response.cursor === undefined || response.cursor === cursor) break;
+    cursor = response.cursor;
   }
 
-  warn(ctx, {
-    kind: 'perps_open_positions_only',
-    message:
-      `Perps replays cover open positions only. ${open.length} open position(s) found; ` +
-      `anything this account has already closed is unreachable through the public API.`,
-    detail: { openPositions: open.length },
-  });
+  if (pages >= MAX_PAGES) truncated = true;
 
+  for (const id of unknownInstruments) {
+    warn(ctx, {
+      kind: 'unknown_instrument',
+      message:
+        `The account traded instrument ${id}, which is not in the venue's instrument ` +
+        `list. Those fills are omitted.`,
+      detail: { instrumentId: id },
+    });
+  }
+
+  if (truncated) {
+    // CLAUDE.md: a truncated history has to reach the exported image, because the
+    // numbers computed from it are wrong in a way nothing on the chart reveals.
+    warn(ctx, {
+      kind: 'fill_history_truncated',
+      message:
+        `Only the most recent ${MAX_PAGES} pages of this account's fills were read. ` +
+        `Anything older is not included and the earliest position shown may be incomplete.`,
+      detail: { pages: MAX_PAGES },
+    });
+  }
+
+  fills.sort((a, b) => a.ts - b.ts);
   return fills;
 }
 

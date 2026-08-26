@@ -136,6 +136,15 @@ export interface EpisodeSummary {
   totalFunding: number;
   net: number;
   fillCount: number;
+  /**
+   * How long the position ran, decided here rather than in the table.
+   *
+   * An open episode's duration is "now minus opened", and "now" is a different instant
+   * on the server than it is when the browser hydrates. Computing it in the component
+   * produced a React hydration mismatch on every open position — invisible on screen,
+   * and a warning React says it will not patch up.
+   */
+  durationMs: number;
 }
 
 export interface EpisodesResult {
@@ -289,7 +298,9 @@ function sliceSpark(series: PriceSeries, from: number, to: number): number[] {
 
 export async function loadEpisodes(venue: VenueId, address: string): Promise<EpisodesResult> {
   const { adapter, source, input, episodes } = await loadAll(venue, address);
-  const sparks = await loadSparklines(adapter, episodes, source.ctx, Date.now());
+  // One instant for the whole response, so every derived duration agrees with itself.
+  const now = Date.now();
+  const sparks = await loadSparklines(adapter, episodes, source.ctx, now);
   const limitation = VENUE_LIMITATIONS[venue];
 
   return {
@@ -312,6 +323,7 @@ export async function loadEpisodes(venue: VenueId, address: string): Promise<Epi
       totalFunding: e.totalFunding,
       net: e.realizedPnl - e.totalFees + e.totalFunding,
       fillCount: e.fills.length,
+      durationMs: (e.closedAt ?? now) - e.openedAt,
     })),
     warnings: source.warnings,
     ...(source.provenanceWarning ? { provenanceWarning: source.provenanceWarning } : {}),

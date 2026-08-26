@@ -8,6 +8,7 @@
  *   <dir>/instruments.json
  *   <dir>/portfolio.json
  *   <dir>/position-fills/<instrumentId>.json
+ *   <dir>/fills/first.json, <dir>/fills/<cursor>.json
  *   <dir>/klines/<instrumentId>-<interval>.json
  *   <dir>/mark-history/<instrumentId>-1s.json
  *   <dir>/meta.json
@@ -58,6 +59,8 @@ export function loadPerpsFixtureStore(dir: string): LoadedPerpsFixture {
     instruments: readJson(join(dir, 'instruments.json')),
     portfolio: readJson(join(dir, 'portfolio.json')),
     positionFills: readDirInto(join(dir, 'position-fills'), Number),
+    // `first` is the page served when the request carries no cursor at all.
+    history: readDirInto(join(dir, 'fills'), (file) => (file === 'first' ? '' : file)),
     klines: readDirInto(join(dir, 'klines'), String),
     markHistory: readDirInto(join(dir, 'mark-history'), String),
     meta: existsSync(metaPath) ? (readJson(metaPath) as PerpsFixtureMeta) : {},

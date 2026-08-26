@@ -22,5 +22,17 @@
     "funding_interval": 3600000,
     "max_leverage": 20,
     "isolated_only": false
+  },
+  {
+    "instrument_id": 3,
+    "symbol": "SOL-PERP",
+    "quantity_decimals": 2,
+    "price_decimals": 3,
+    "category": "crypto",
+    "base_asset": "SOL",
+    "quote_asset": "pUSD",
+    "funding_interval": 3600000,
+    "max_leverage": 20,
+    "isolated_only": false
   }
 ]

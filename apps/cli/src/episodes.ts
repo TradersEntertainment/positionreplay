@@ -141,7 +141,7 @@ async function main(): Promise<number> {
   const account = options.address === '' ? (source.defaultAccount ?? '') : options.address;
   const input = await adapter.parseInput(account, source.ctx);
 
-  // SPEC §4.4.1 option A: the limitation has to be visible before any numbers are.
+  // SPEC §4.4.1: the limitation has to be visible before any numbers are.
   const limitation = limitationText(adapter.id);
   if (limitation && !options.json) console.log(`${yellow('note    ')} ${limitation}`);
 

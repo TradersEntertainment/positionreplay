@@ -82,8 +82,8 @@ async function run(browser: Browser): Promise<void> {
   );
 
   record(
-    "option A's limitation is stated before any address is entered",
-    (await page.getByText(/Only positions that are open right now/).count()) > 0,
+    "the venue's limitation is stated before any address is entered",
+    (await page.getByText(/funding as unavailable rather than as zero/).count()) > 0,
     'shown on the landing page',
   );
   writeFileSync(join(SHOTS, 'm6-01-landing.png'), await page.screenshot());
@@ -96,7 +96,7 @@ async function run(browser: Browser): Promise<void> {
   await page.waitForSelector('[data-testid="episode-table"]');
 
   const rows = await page.getByTestId('episode-row').count();
-  record('the toggle reaches the Perps browser', rows >= 2, `${rows} open positions listed`);
+  record('the toggle reaches the Perps browser', rows >= 2, `${rows} positions listed`);
 
   record(
     "the limitation is repeated where the numbers are (SPEC §4.4.1: 'Label it in the UI')",
@@ -104,14 +104,16 @@ async function run(browser: Browser): Promise<void> {
     ((await page.getByTestId('venue-limitation').first().textContent()) ?? '').slice(0, 72).trim(),
   );
 
-  // --- every Perps episode is open, because that is all option A can see ---
-  const closedCells = await page.$$eval('[data-testid="episode-row"]', (nodes) =>
+  // --- closed Perps positions exist now, which option A could never show ---
+  const cells = await page.$$eval('[data-testid="episode-row"]', (nodes) =>
     nodes.map((n) => n.textContent ?? ''),
   );
+  const open = cells.filter((text) => text.includes('OPEN')).length;
   record(
-    'every Perps episode reads as still open',
-    closedCells.every((text) => text.includes('OPEN')),
-    `${closedCells.length} rows, all OPEN`,
+    'the browser lists both closed and open Perps positions',
+    open > 0 && open < cells.length,
+    `${cells.length} rows, ${open} open — under option A every row read OPEN, because a ` +
+      `closed position was unreachable`,
   );
   writeFileSync(join(SHOTS, 'm6-02-perps-browser.png'), await page.screenshot());
 

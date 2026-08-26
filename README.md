@@ -30,7 +30,7 @@ pnpm install
 # Reconstruct an address's position episodes.
 pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109
 
-# The same, on Polymarket Perps. Only currently-open positions exist there — see below.
+# The same, on Polymarket Perps. Note the address caveat below.
 pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109 --venue polymarket-perps
 
 # A CSV of your own fills. In the web app you upload it; the CLI takes a fixture.
@@ -87,7 +87,7 @@ is not decorative: it unmaps the fee column, re-applies, and checks the reconstr
 PnL moved by exactly the fees in the file. It also drives SPEC §4.6's fallback —
 a symbol Binance does not list, replayed from a user-supplied OHLCV file.
 
-`verify:m6` drives the venue toggle to the Perps browser, checks that option A's
+`verify:m6` drives the venue toggle to the Perps browser, checks that the venue's
 limitation is stated on the page and not only in a doc, and samples the canvas pixels for
 `markerLiquidation` — a colour used by nothing else — so a forced exit cannot silently
 render as an ordinary close.
@@ -199,20 +199,29 @@ touched for those symbols at all.
 
 Funding shows `—`: a trades file carries no funding payments, so there are none to read.
 
-## Polymarket Perps: what it cannot show
+## Polymarket Perps: the address, and what it cannot show
 
-The adapter runs SPEC §4.4.1's **option A**. `/v1/info/position-fills` serves only the
-*currently open* cycle for an instrument, so:
+This was built as SPEC §4.4.1's **option A** — open positions only, via
+`/v1/info/position-fills`, which serves just the current open cycle. That made a closed
+Perps position permanently unreplayable, and the app said so everywhere.
 
-- A Perps position that has already closed is **not replayable**. Not "empty" — gone.
-  The endpoint returns nothing for it and no other public endpoint backfills it.
-- Every Perps episode therefore reads `OPEN`, and the browser and the landing page both
-  say so before an address is typed.
+It is not true. `/v1/info/fills` serves the account's whole history and is public:
+probed live, a cross-origin `fetch` with no `Authorization` header and no cookies
+returns 200 and pages of records, `liquidation`, `adl`, `previous_size` and
+`previous_entry_price` included. Closed Perps positions replay. Option A was chosen on
+the belief that no such endpoint existed; the belief was wrong, not the reasoning.
+
+What is still true:
+
+- **Perps uses a different address from the one a Polymarket profile shows.** A profile
+  URL carries the *proxy wallet*; the Perps API answers `400 {"error":"account not
+  found"}` for it. Paste the address from the trader's Perps page. Getting this wrong
+  raises `UnknownAccountError` with that explanation rather than showing an empty
+  account, which SPEC §4.5 warns reads as a bug in this app.
 - **Funding shows `—`, not `$0.00`.** Per-account funding charges are authenticated-only
   (§4.4.2), and printing zero would assert that none was paid. The net PnL excludes it
   and says that it does.
-- Perps *fills* are never cached, though candles still are. The open cycle is mutable by
-  definition: cache it and the app would keep serving a position that has since closed.
+- Perps *fills* are never cached, though candles still are.
 
 A username → wallet resolver (§4.5) is deliberately **not** written. CLAUDE.md requires
 verifying with curl that a Gamma-resolved wallet works against the Perps API first, and
