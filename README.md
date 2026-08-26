@@ -13,7 +13,8 @@ Replay any trader's position from open to close as an animated, time-lapse chart
 | **M3** interactive player | Complete — 15/15 browser checks pass |
 | **M4** episode browser + caching | Complete — 12/12 browser checks pass |
 | **M5** client-side export | Complete — 11/11 browser checks pass |
-| M6–M8 | Not started |
+| **M6** Polymarket Perps adapter | Complete — 11/11 browser checks pass |
+| M7–M8 | Not started |
 
 M1 is deliberately *not* marked done. SPEC §12 defines it as done when the numbers
 match Hyperliquid's own UI, and the environment this was built in blocks every venue
@@ -27,6 +28,9 @@ pnpm install
 
 # Reconstruct an address's position episodes.
 pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109
+
+# The same, on Polymarket Perps. Only currently-open positions exist there — see below.
+pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109 --venue polymarket-perps
 
 # ...or offline, against a recorded fixture.
 pnpm episodes 0x393d0b87ed38fc779fd9611144ae649ba6082109 --fixture synthetic
@@ -52,7 +56,13 @@ cd apps/web && TRADE_REPLAY_FIXTURE=synthetic npx next start -p 3100 &
 pnpm verify:m3
 pnpm verify:m4
 pnpm verify:m5
+pnpm verify:m6
 ```
+
+`verify:m6` drives the venue toggle to the Perps browser, checks that option A's
+limitation is stated on the page and not only in a doc, and samples the canvas pixels for
+`markerLiquidation` — a colour used by nothing else — so a forced exit cannot silently
+render as an ordinary close.
 
 `verify:m5` downloads the real WebM and GIF and inspects their bytes — the EBML magic,
 the GIF header's width field, and the animation-frame count. A button that appears to
@@ -66,12 +76,12 @@ exercised is the one that runs in production.
 
 ```
 packages/core        pure TS, zero deps: the §5 fold and the §6 timeline
-packages/adapters    venue connectors; Hyperliquid so far
+packages/adapters    venue connectors; Hyperliquid and Polymarket Perps
 packages/renderer    pure Canvas 2D; runs in a browser AND in Node
 packages/cache       SPEC §10 caching on SQLite via Drizzle
 apps/web             Next.js browser + player + /api adapter proxies
 apps/cli             episodes / render-still / verify:m1
-scripts/             capture-hl, verify-m3, synthetic fixture generator
+scripts/             capture-hl, capture-pm, verify-m3…m6, synthetic fixture generator
 fixtures/            recorded and synthetic venue responses
 ```
 
@@ -104,4 +114,27 @@ documented Hyperliquid response so the code paths run offline, and every output 
 from it is stamped `SYNTHETIC DATA` — including the rendered PNG, because an export is
 a screenshot someone posts as fact.
 
-Real recordings come from `pnpm capture:hl <address>`.
+`fixtures/polymarket-perps/synthetic` is invented the same way and stamped the same way.
+
+Real recordings come from `pnpm capture:hl <address>` and `pnpm capture:pm <address>`.
+
+## Polymarket Perps: what it cannot show
+
+The adapter runs SPEC §4.4.1's **option A**. `/v1/info/position-fills` serves only the
+*currently open* cycle for an instrument, so:
+
+- A Perps position that has already closed is **not replayable**. Not "empty" — gone.
+  The endpoint returns nothing for it and no other public endpoint backfills it.
+- Every Perps episode therefore reads `OPEN`, and the browser and the landing page both
+  say so before an address is typed.
+- **Funding shows `—`, not `$0.00`.** Per-account funding charges are authenticated-only
+  (§4.4.2), and printing zero would assert that none was paid. The net PnL excludes it
+  and says that it does.
+- Perps *fills* are never cached, though candles still are. The open cycle is mutable by
+  definition: cache it and the app would keep serving a position that has since closed.
+
+A username → wallet resolver (§4.5) is deliberately **not** written. CLAUDE.md requires
+verifying with curl that a Gamma-resolved wallet works against the Perps API first, and
+that host is unreachable from this environment. §4.5 is explicit that shipping it
+unverified is the worse outcome: it would return "no positions" for a valid trader and
+read as a bug in the app.

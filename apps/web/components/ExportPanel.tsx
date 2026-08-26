@@ -36,17 +36,26 @@ export interface ExportPanelProps {
   address: string;
   interval: string;
   notices: string[];
+  fundingUnavailable?: boolean;
   shareUrl: string;
 }
 
 export function ExportPanel(props: ExportPanelProps) {
-  const { episode, series, address, interval, notices, shareUrl } = props;
+  const { episode, series, address, interval, notices, fundingUnavailable, shareUrl } = props;
 
   // Built here rather than passed from the server: Frame[] is large, and buildFrames is
   // pure and cheap enough that shipping it would only inflate the page payload.
   const scene: ExportScene = useMemo(
-    () => ({ episode, series, frames: buildFrames(episode, series), address, interval, notices }),
-    [episode, series, address, interval, notices],
+    () => ({
+      episode,
+      series,
+      frames: buildFrames(episode, series),
+      address,
+      interval,
+      notices,
+      ...(fundingUnavailable ? { fundingUnavailable: true } : {}),
+    }),
+    [episode, series, address, interval, notices, fundingUnavailable],
   );
 
   const [preset, setPreset] = useState<ExportPreset>(EXPORT_PRESETS[0]!);

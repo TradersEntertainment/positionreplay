@@ -9,8 +9,8 @@
  * and §12), and building it now would be scaffolding a milestone that has not started.
  */
 
-import { hyperliquidAdapter } from '@trade-replay/adapters';
-import type { AdapterWarning } from '@trade-replay/adapters';
+import { VENUE_LIMITATIONS, adapterFor } from '@trade-replay/adapters';
+import type { Adapter, AdapterWarning } from '@trade-replay/adapters';
 import { createSource, fixtureFromEnv, findWorkspaceRoot } from '@trade-replay/adapters/source';
 import type { SourceCache } from '@trade-replay/adapters/source';
 import { cacheUrlFor, createCandleCache, createFillCache, openCache } from '@trade-replay/cache';
@@ -22,7 +22,7 @@ import {
   replayIdForEpisode,
   seriesRangeFor,
 } from '@trade-replay/core';
-import type { PositionEpisode, PriceSeries, TimeRange } from '@trade-replay/core';
+import type { PositionEpisode, PriceSeries, TimeRange, VenueId } from '@trade-replay/core';
 
 /**
  * One SQLite connection for the whole process, opened lazily.
@@ -87,8 +87,11 @@ export interface EpisodeSummary {
 }
 
 export interface EpisodesResult {
+  venue: VenueId;
   address: string;
   label: string;
+  /** SPEC §4.4.1: shown before any numbers are, for venues that have one. */
+  limitation?: string;
   episodes: EpisodeSummary[];
   warnings: AdapterWarning[];
   provenanceWarning?: string;
@@ -96,8 +99,12 @@ export interface EpisodesResult {
 
 export interface ReplayResult {
   replayId: string;
+  venue: VenueId;
   address: string;
   label: string;
+  limitation?: string;
+  /** The venue cannot report this account's funding; the HUD must not print zero. */
+  fundingUnavailable: boolean;
   episode: PositionEpisode;
   series: PriceSeries;
   interval: string;
@@ -125,23 +132,24 @@ function stripRaw(episode: PositionEpisode): PositionEpisode {
   };
 }
 
-async function loadAll(address: string) {
-  const source = createSource(fixtureFromEnv(), { cache: cache() });
-  const input = await hyperliquidAdapter.parseInput(address, source.ctx);
+async function loadAll(venue: VenueId, address: string) {
+  const adapter: Adapter = adapterFor(venue);
+  const source = createSource(fixtureFromEnv(), { venue, cache: cache() });
+  const input = await adapter.parseInput(address, source.ctx);
 
-  const fills = await hyperliquidAdapter.fetchFills(input, undefined, source.ctx);
+  const fills = await adapter.fetchFills(input, undefined, source.ctx);
   if (fills.length === 0) {
-    return { source, input, fills, episodes: [] as PositionEpisode[] };
+    return { adapter, source, input, fills, episodes: [] as PositionEpisode[] };
   }
 
   const range = {
     from: Math.min(...fills.map((f) => f.ts)),
     to: Math.max(...fills.map((f) => f.ts)),
   };
-  const funding = (await hyperliquidAdapter.fetchFunding?.(input, range, source.ctx)) ?? [];
-  const episodes = buildEpisodes(fills, { venue: 'hyperliquid', funding });
+  const funding = (await adapter.fetchFunding?.(input, range, source.ctx)) ?? [];
+  const episodes = buildEpisodes(fills, { venue, funding });
 
-  return { source, input, fills, episodes };
+  return { adapter, source, input, fills, episodes };
 }
 
 /** Points per row sparkline. Enough to show a shape, few enough to inline in HTML. */
@@ -158,8 +166,9 @@ const SPARK_POINTS = 32;
  * missing sparkline is cosmetic, an unreachable episode list is not.
  */
 async function loadSparklines(
+  adapter: Adapter,
   episodes: readonly PositionEpisode[],
-  ctx: Parameters<typeof hyperliquidAdapter.fetchSeries>[1],
+  ctx: Parameters<Adapter['fetchSeries']>[1],
   now: number,
 ): Promise<Map<string, number[]>> {
   const byInstrument = new Map<string, TimeRange>();
@@ -178,11 +187,11 @@ async function loadSparklines(
   await Promise.all(
     [...byInstrument].map(async ([instrument, range]) => {
       // Coarse on purpose: a sparkline needs a shape, not resolution.
-      const picked = pickInterval(range.to - range.from, hyperliquidAdapter.intervals, { targetFrames: 120 });
+      const picked = pickInterval(range.to - range.from, adapter.intervals, { targetFrames: 120 });
       try {
         series.set(
           instrument,
-          await hyperliquidAdapter.fetchSeries(
+          await adapter.fetchSeries(
             { instrument, interval: picked.interval, ...range },
             ctx,
           ),
@@ -222,13 +231,16 @@ function sliceSpark(series: PriceSeries, from: number, to: number): number[] {
   return span === 0 ? sampled.map(() => 0.5) : sampled.map((p) => (p - min) / span);
 }
 
-export async function loadEpisodes(address: string): Promise<EpisodesResult> {
-  const { source, input, episodes } = await loadAll(address);
-  const sparks = await loadSparklines(episodes, source.ctx, Date.now());
+export async function loadEpisodes(venue: VenueId, address: string): Promise<EpisodesResult> {
+  const { adapter, source, input, episodes } = await loadAll(venue, address);
+  const sparks = await loadSparklines(adapter, episodes, source.ctx, Date.now());
+  const limitation = VENUE_LIMITATIONS[venue];
 
   return {
+    venue,
     address: input.address,
     label: source.label,
+    ...(limitation ? { limitation } : {}),
     episodes: episodes.map((e) => ({
       replayId: replayIdForEpisode(e, input.address),
       spark: sparks.get(e.id) ?? [],
@@ -259,7 +271,7 @@ export async function loadReplay(
   const ref = decodeReplayId(replayId);
   if (!ref) throw new ReplayNotFoundError('That replay link is not valid.');
 
-  const { source, episodes } = await loadAll(ref.address);
+  const { adapter, source, episodes } = await loadAll(ref.venue, ref.address);
   const episode = findEpisodeByRef(episodes, ref);
   if (!episode) {
     throw new ReplayNotFoundError(
@@ -269,16 +281,18 @@ export async function loadReplay(
 
   const now = Date.now();
   const range = seriesRangeFor(episode, now);
-  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, hyperliquidAdapter.intervals, {
+  const picked = pickInterval((episode.closedAt ?? now) - episode.openedAt, adapter.intervals, {
     ...(intervalOverride ? { override: intervalOverride } : {}),
   });
 
-  const series = await hyperliquidAdapter.fetchSeries(
+  const series = await adapter.fetchSeries(
     { instrument: episode.instrument, interval: picked.interval, from: range.from, to: range.to },
     source.ctx,
   );
 
+  const limitation = VENUE_LIMITATIONS[ref.venue];
   const notices = [
+    ...(limitation ? [limitation] : []),
     ...source.warnings.map((w) => w.message),
     ...(picked.warning ? [picked.warning] : []),
     ...(source.provenanceWarning ? ['SYNTHETIC DATA — not a real position'] : []),
@@ -286,13 +300,18 @@ export async function loadReplay(
 
   return {
     replayId,
+    venue: ref.venue,
     address: ref.address,
     label: source.label,
+    ...(limitation ? { limitation } : {}),
+    // SPEC §4.4.2: some venues serve per-account funding only to an authenticated
+    // session. The HUD shows a dash rather than asserting zero.
+    fundingUnavailable: adapter.fetchFunding === undefined,
     episode: stripRaw(episode),
     series,
     interval: picked.interval,
     barCount: series.kind === 'ohlcv' ? series.candles.length : series.points.length,
-    availableIntervals: hyperliquidAdapter.intervals.map((i) => i.name),
+    availableIntervals: adapter.intervals.map((i) => i.name),
     warnings: source.warnings,
     notices,
     ...(source.provenanceWarning ? { provenanceWarning: source.provenanceWarning } : {}),

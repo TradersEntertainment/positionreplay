@@ -70,6 +70,8 @@ export interface ExportScene {
   interval: string;
   /** Painted into every frame; these must not be lost on the way out. */
   notices: string[];
+  /** Carried into the export too — an unknown funding figure must not export as zero. */
+  fundingUnavailable?: boolean;
 }
 
 export class ExportUnsupportedError extends Error {
@@ -88,6 +90,7 @@ function layoutFor(scene: ExportScene, width: number, height: number) {
     watermark: 'trade-replay',
     interval: scene.interval,
     ...(scene.notices.length > 0 ? { notices: scene.notices } : {}),
+    ...(scene.fundingUnavailable ? { fundingUnavailable: true } : {}),
   };
 }
 

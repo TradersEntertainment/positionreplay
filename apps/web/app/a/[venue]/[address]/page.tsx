@@ -4,13 +4,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { EpisodeTable } from '@/components/EpisodeTable';
 import { Notices } from '@/components/Notices';
+import { isSupportedVenue, VENUE_LABELS } from '@trade-replay/adapters';
 import { loadEpisodes } from '@/lib/data';
 import { formatUsd, shortAddress } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
-
-/** Only Hyperliquid has an adapter; the others arrive in M6 and M7. */
-const SUPPORTED = new Set(['hyperliquid']);
 
 export default async function AddressPage({
   params,
@@ -18,11 +16,12 @@ export default async function AddressPage({
   params: Promise<{ venue: string; address: string }>;
 }) {
   const { venue, address } = await params;
-  if (!SUPPORTED.has(venue)) notFound();
+  // CSV has no adapter yet (M7), so an unknown venue is a 404 rather than a broken page.
+  if (!isSupportedVenue(venue)) notFound();
 
   let result;
   try {
-    result = await loadEpisodes(decodeURIComponent(address));
+    result = await loadEpisodes(venue, decodeURIComponent(address));
   } catch (error) {
     return (
       <main className="mx-auto max-w-6xl p-6">
@@ -41,6 +40,15 @@ export default async function AddressPage({
       <Header venue={venue} address={result.address} />
 
       <div className="mt-4 space-y-4">
+        {result.limitation ? (
+          <p
+            className="border border-tr-notice/40 bg-tr-notice/10 p-3 text-xs text-tr-notice"
+            data-testid="venue-limitation"
+          >
+            <span className="font-bold">Open positions only</span> — {result.limitation}
+          </p>
+        ) : null}
+
         <Notices warnings={result.warnings} provenanceWarning={result.provenanceWarning} />
 
         {result.episodes.length === 0 ? (
@@ -73,7 +81,7 @@ function Header({ venue, address }: { venue: string; address: string }) {
         <h1 className="text-xl font-bold" data-testid="address-heading">
           {shortAddress(address)}
         </h1>
-        <p className="mt-1 text-xs text-tr-dim">{venue}</p>
+        <p className="mt-1 text-xs text-tr-dim">{VENUE_LABELS[venue] ?? venue}</p>
       </div>
       <Link href="/" className="text-xs text-tr-dim underline hover:text-tr-text">
         new address

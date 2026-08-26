@@ -61,6 +61,15 @@ export default async function ReplayPage({
       </div>
 
       <div className="mt-4 space-y-4">
+        {replay.limitation ? (
+          <p
+            className="border border-tr-notice/40 bg-tr-notice/10 p-3 text-xs text-tr-notice"
+            data-testid="venue-limitation"
+          >
+            <span className="font-bold">Open positions only</span> — {replay.limitation}
+          </p>
+        ) : null}
+
         <Notices warnings={replay.warnings} provenanceWarning={replay.provenanceWarning} />
 
         <Player
@@ -71,6 +80,7 @@ export default async function ReplayPage({
           interval={replay.interval}
           availableIntervals={replay.availableIntervals}
           notices={replay.notices}
+          fundingUnavailable={replay.fundingUnavailable}
         />
 
         <ExportPanel
@@ -79,6 +89,7 @@ export default async function ReplayPage({
           address={replay.address}
           interval={replay.interval}
           notices={replay.notices}
+          fundingUnavailable={replay.fundingUnavailable}
           shareUrl={`/r/${replay.replayId}`}
         />
       </div>

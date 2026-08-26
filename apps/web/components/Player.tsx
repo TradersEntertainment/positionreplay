@@ -33,6 +33,8 @@ export interface PlayerProps {
   interval: string;
   availableIntervals: string[];
   notices: string[];
+  /** The venue cannot report funding for this account; the HUD shows a dash. */
+  fundingUnavailable?: boolean;
 }
 
 function seriesLength(series: PriceSeries): number {
@@ -95,6 +97,7 @@ export function Player(props: PlayerProps) {
         watermark: 'trade-replay',
         interval,
         ...(notices.length > 0 ? { notices } : {}),
+        ...(props.fundingUnavailable ? { fundingUnavailable: true } : {}),
       });
 
       if (readoutRef.current) {
@@ -104,7 +107,7 @@ export function Player(props: PlayerProps) {
         scrubRef.current.value = String(index);
       }
     },
-    [frames, renderer, interval, notices, props.address],
+    [frames, renderer, interval, notices, props.address, props.fundingUnavailable],
   );
 
   /** Match the backing store to the element's real size, in device pixels. */
