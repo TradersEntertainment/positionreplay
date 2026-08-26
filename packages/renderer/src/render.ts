@@ -80,6 +80,14 @@ function barIndexFor(fill: Fill, times: number[]): number {
 export interface RenderOptions {
   /** SPEC §7.2 easing factor; exposed so the exporter can match the preview exactly. */
   easing?: number;
+  /**
+   * PnL-reactive effects (effects.ts). On by default.
+   *
+   * The switch exists so a caller can render the plain chart — a thumbnail, a
+   * regression fixture — not so the export and the preview can differ. Turning it off
+   * for one of them and not the other breaks SPEC §9's pixel identity.
+   */
+  effects?: boolean;
 }
 
 /**

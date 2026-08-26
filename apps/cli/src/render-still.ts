@@ -19,7 +19,7 @@ import { adapterFor, isSupportedVenue, limitationText } from '@trade-replay/adap
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes, buildFrames, pickInterval, seriesRangeFor } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
-import { advanceScale, createScale, darkTheme, lightTheme, renderFrame } from '@trade-replay/renderer';
+import { createSequenceRenderer, darkTheme, lightTheme } from '@trade-replay/renderer';
 import type { Canvas2D } from '@trade-replay/renderer';
 import { bold, cyan, dim, green, red, usd, yellow } from './format.js';
 import { createCachedSource } from '@trade-replay/cache';
@@ -199,18 +199,18 @@ pnpm render:still <address> [options]
     ...(source.provenanceWarning ? ['SYNTHETIC DATA — not a real position'] : []),
   ];
 
-  const scale = createScale();
-  // Replay the easing so this frame is framed exactly as the animation would show it.
-  for (let i = 0; i < frameIndex; i++) advanceScale(scale, series, frames[i]!, episode);
-
-  renderFrame(
-    ctx as unknown as Canvas2D,
-    frame,
+  // The same renderer the player, the browser export and M8's worker use. It replays
+  // the easing up to this frame and supplies its energy, so the still is framed and
+  // lit exactly as the animation would show it — which is the only reason this command
+  // is a useful way to look at a change.
+  const renderer = createSequenceRenderer(
     episode,
     series,
-    scale,
+    frames,
     values.theme === 'light' ? lightTheme : darkTheme,
-    {
+  );
+
+  renderer.render(ctx as unknown as Canvas2D, frameIndex, {
       width,
       height,
       dpr: 1,
@@ -221,10 +221,9 @@ pnpm render:still <address> [options]
       // The venue has no per-account funding to give (SPEC §4.4.2); a $0.00 in the
       // exported image would assert that none was paid.
       ...(adapter.fetchFunding ? {} : { fundingUnavailable: true }),
-      ...(values['x-mode'] === 'fixed' ? { xMode: 'fixed' as const } : {}),
-      ...(notices.length > 0 ? { notices } : {}),
-    },
-  );
+    ...(values['x-mode'] === 'fixed' ? { xMode: 'fixed' as const } : {}),
+    ...(notices.length > 0 ? { notices } : {}),
+  });
 
   const out = values.out ?? 'out.png';
   writeFileSync(out, canvas.toBuffer('image/png'));

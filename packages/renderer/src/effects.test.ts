@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Frame } from '@trade-replay/core';
-import { BLOCKS, blockMeter, computeEnergyTrack, flashStrength } from './effects.js';
+import { computeEnergyTrack, flashStrength, meterCells } from './effects.js';
 
 function framesOf(pnls: number[]): Frame[] {
   return pnls.map((totalPnl, i) => ({
@@ -92,35 +92,43 @@ describe('computeEnergyTrack', () => {
   });
 });
 
-describe('blockMeter', () => {
+describe('meterCells', () => {
   it('is empty at zero and full at one', () => {
-    expect(blockMeter(0, 4).trim()).toBe('');
-    expect(blockMeter(1, 4)).toBe('████');
+    expect(meterCells(0, 4)).toEqual([0, 0, 0, 0]);
+    expect(meterCells(1, 4)).toEqual([1, 1, 1, 1]);
   });
 
   it('fills left to right', () => {
-    expect(blockMeter(0.5, 4).startsWith('██')).toBe(true);
+    expect(meterCells(0.5, 4)).toEqual([1, 1, 0, 0]);
   });
 
-  it('uses a partial block for the remainder', () => {
-    const meter = blockMeter(0.55, 4);
-    expect(meter[2]).not.toBe(' ');
-    expect(BLOCKS).toContain(meter[2]);
+  it('gives the boundary cell the remainder, so the meter reads as continuous', () => {
+    const cells = meterCells(0.55, 4);
+    expect(cells[2]).toBeCloseTo(0.2, 10);
+    expect(cells[3]).toBe(0);
   });
 
   it('is always exactly the requested width, so the HUD does not reflow', () => {
     for (const level of [0, 0.13, 0.5, 0.87, 1]) {
-      expect(blockMeter(level, 10)).toHaveLength(10);
+      expect(meterCells(level, 10)).toHaveLength(10);
     }
   });
 
   it('clamps a level outside 0..1 rather than overflowing', () => {
-    expect(blockMeter(5, 3)).toBe('███');
-    expect(blockMeter(-5, 3)).toHaveLength(3);
+    expect(meterCells(5, 3)).toEqual([1, 1, 1]);
+    expect(meterCells(-5, 3)).toEqual([0, 0, 0]);
   });
 
   it('returns nothing for a zero width', () => {
-    expect(blockMeter(0.5, 0)).toBe('');
+    expect(meterCells(0.5, 0)).toEqual([]);
+  });
+
+  it('never returns a fraction a canvas cannot draw', () => {
+    // A NaN level reached a fillRect width once and the meter simply vanished, which
+    // is the failure mode this whole module has to avoid: silence, not a crash.
+    for (const cell of meterCells(Number.NaN, 5)) {
+      expect(Number.isFinite(cell)).toBe(true);
+    }
   });
 });
 

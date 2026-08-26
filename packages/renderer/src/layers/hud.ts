@@ -23,9 +23,12 @@ import {
   text,
   usd,
 } from '../helpers.js';
-import { blockMeter, flashStrength } from '../effects.js';
+import { flashStrength, meterCells } from '../effects.js';
 import type { Canvas2D } from '../types.js';
 import type { LayerContext } from './context.js';
+
+/** Cells in the PnL meter. Twelve reads as a scale; more reads as a progress bar. */
+const METER_CELLS = 12;
 
 /**
  * Green means gained, red means lost, and exactly zero means neither.
@@ -103,9 +106,10 @@ function drawTotalPnl(ctx: Canvas2D, c: LayerContext): void {
   const x = metrics.plot.x1 + metrics.axisWidth * 0.6;
   const energy = layout.energy;
 
+  const labelFont = font(theme, unit * 1.8);
   text(ctx, 'TOTAL PNL', x, hud.top, {
     color: theme.hudDim,
-    font: font(theme, unit * 1.8),
+    font: labelFont,
     align: 'right',
     baseline: 'top',
   });
@@ -139,24 +143,68 @@ function drawTotalPnl(ctx: Canvas2D, c: LayerContext): void {
     baseline: 'top',
   });
 
-  // The meter under the number: where this PnL sits between the replay's own worst and
-  // best. Block characters rather than a drawn bar, because §7.3 asks for a terminal
-  // and because it then survives being scaled to any export size as text.
+  // Where this PnL sits between the replay's own worst and best, so a viewer can see at
+  // a glance whether they are watching the top of the trade or the bottom of it.
+  //
+  // On the label's line rather than under the number. Under it there is no room: the
+  // date sits one line below, and pushing the date down put it inside the plot, on top
+  // of the fill labels. Here it fills space that was empty anyway.
   if (energy) {
-    text(ctx, blockMeter(energy.level, 12), x, hud.top + hud.lineHeight * 2.35, {
-      color,
-      font: font(theme, unit * 1.9, 'bold'),
-      align: 'right',
-      baseline: 'top',
-    });
+    ctx.save();
+    ctx.font = labelFont;
+    const labelWidth = ctx.measureText('TOTAL PNL').width;
+    ctx.restore();
+    drawMeter(ctx, c, x - labelWidth - unit * 1.2, hud.top + unit * 0.15, energy.level, color);
   }
 
-  text(ctx, hudDate(frame.t), x, hud.top + hud.lineHeight * (energy ? 3.3 : 2.4), {
+  text(ctx, hudDate(frame.t), x, hud.top + hud.lineHeight * 2.4, {
     color: theme.hudDim,
     font: font(theme, unit * 1.7),
     align: 'right',
     baseline: 'top',
   });
+}
+
+/**
+ * The PnL meter: a row of cells, filled left to right.
+ *
+ * Rectangles rather than the block characters ▁▂▃…█ that a terminal would use. The
+ * bundled JetBrains Mono has no glyphs in that range, so it drew as tofu boxes — and
+ * worse, a browser would have substituted a fallback font where Node has none, making
+ * the preview and the exported MP4 different pictures (SPEC §9). Flat fills, hard
+ * edges, no gradient: §7.3 is intact either way.
+ */
+function drawMeter(
+  ctx: Canvas2D,
+  c: LayerContext,
+  right: number,
+  top: number,
+  level: number,
+  color: string,
+): void {
+  const { unit } = c.metrics;
+  const cells = meterCells(level, METER_CELLS);
+  const cellW = unit * 0.9;
+  const gap = unit * 0.3;
+  const height = unit * 1.6;
+  const width = cells.length * cellW + (cells.length - 1) * gap;
+  const x0 = right - width;
+
+  ctx.save();
+  ctx.setLineDash([]);
+  cells.forEach((fill, i) => {
+    const x = x0 + i * (cellW + gap);
+    // An unfilled cell is drawn as a floor rather than left blank, so the meter has a
+    // constant length and the eye reads a position rather than a growing bar.
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = c.theme.hudDim;
+    ctx.fillRect(x, top + height - unit * 0.18, cellW, unit * 0.18);
+    if (fill > 0) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, top + height * (1 - fill), cellW, height * fill);
+    }
+  });
+  ctx.restore();
 }
 
 function drawStatsBar(ctx: Canvas2D, c: LayerContext): void {

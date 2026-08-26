@@ -12,6 +12,7 @@
  */
 
 import type { Frame, PositionEpisode, PriceSeries } from '@trade-replay/core';
+import { computeEnergyTrack, type FrameEnergy } from './effects.js';
 import { advanceScale, renderFrame, type RenderOptions } from './render.js';
 import { createScale, type ScaleState } from './scale.js';
 import type { Canvas2D, RenderLayout, Theme } from './types.js';
@@ -34,6 +35,13 @@ export function createSequenceRenderer(
 ): SequenceRenderer {
   let scale: ScaleState = createScale();
   let lastIndex = -1;
+
+  // Computed once, here, for the same reason the easing lives here: every path that
+  // draws this replay — player, WebM/GIF export, M8's server worker — goes through this
+  // function, so this is the only place the effects can be guaranteed identical across
+  // all three. Doing it in the player would mean the exported file is a different clip
+  // from the one the user watched.
+  const energy: FrameEnergy[] = options.effects === false ? [] : computeEnergyTrack(frames);
 
   return {
     get lastIndex() {
@@ -60,7 +68,19 @@ export function createSequenceRenderer(
       }
       lastIndex = index;
 
-      renderFrame(ctx, frame, episode, series, scale, theme, layout, options);
+      // `exactOptionalPropertyTypes`: an absent track means absent, not `undefined`,
+      // and the layers read absence as "draw the plain chart".
+      const frameEnergy = energy[index];
+      renderFrame(
+        ctx,
+        frame,
+        episode,
+        series,
+        scale,
+        theme,
+        frameEnergy ? { ...layout, energy: frameEnergy } : layout,
+        options,
+      );
     },
   };
 }

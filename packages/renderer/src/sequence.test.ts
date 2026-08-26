@@ -1,6 +1,7 @@
 import { buildEpisodes, buildFrames } from '@trade-replay/core';
 import type { Fill, PriceSeries } from '@trade-replay/core';
 import { describe, expect, it } from 'vitest';
+import { computeEnergyTrack } from './effects.js';
 import { createSequenceRenderer } from './sequence.js';
 import { createScale } from './scale.js';
 import { advanceScale, renderFrame } from './render.js';
@@ -122,9 +123,54 @@ describe('createSequenceRenderer', () => {
     const byHand = recordingContext();
     const scale = createScale();
     for (let i = 0; i < 40; i++) advanceScale(scale, series, frames[i]!, episode);
-    renderFrame(byHand.ctx, frames[40]!, episode, series, scale, darkTheme, LAYOUT);
+    // The energy has to be supplied by hand too: the sequence renderer adds it, and
+    // that is the point of it living there. If this line were droppable the effects
+    // would not be reaching the layers at all.
+    const energy = computeEnergyTrack(frames)[40]!;
+    renderFrame(byHand.ctx, frames[40]!, episode, series, scale, darkTheme, {
+      ...LAYOUT,
+      energy,
+    });
 
     expect(viaSequence.calls).toEqual(byHand.calls);
+  });
+
+  it('feeds each frame its own energy, so the effects are in the export too', () => {
+    // The whole reason the track is computed here rather than in the player: the
+    // browser preview, the WebM/GIF export and M8's server worker all come through
+    // this function, so none of them can end up showing a different clip.
+    const track = computeEnergyTrack(frames);
+
+    const plain = recordingContext();
+    createSequenceRenderer(episode, series, frames, darkTheme, { effects: false }).render(
+      plain.ctx,
+      40,
+      LAYOUT,
+    );
+
+    const withEffects = recordingContext();
+    createSequenceRenderer(episode, series, frames, darkTheme).render(withEffects.ctx, 40, LAYOUT);
+
+    // A frame in the middle of a rising position has momentum, so the two must differ.
+    expect(track[40]!.momentum).not.toBe(0);
+    expect(withEffects.calls).not.toEqual(plain.calls);
+    expect(withEffects.calls.length).toBeGreaterThan(plain.calls.length);
+  });
+
+  it('draws the plain chart when effects are switched off', () => {
+    const off = recordingContext();
+    createSequenceRenderer(episode, series, frames, darkTheme, { effects: false }).render(
+      off.ctx,
+      40,
+      LAYOUT,
+    );
+
+    const noEnergy = recordingContext();
+    const scale = createScale();
+    for (let i = 0; i < 40; i++) advanceScale(scale, series, frames[i]!, episode);
+    renderFrame(noEnergy.ctx, frames[40]!, episode, series, scale, darkTheme, LAYOUT);
+
+    expect(off.calls).toEqual(noEnergy.calls);
   });
 
   it('replays from the start when it goes backwards', () => {

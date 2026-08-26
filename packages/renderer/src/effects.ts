@@ -3,9 +3,10 @@
  *
  * SPEC §7.3 rules the aesthetic: "no gradients, no rounded corners, no shadows. It
  * should look like a terminal, not a dashboard." So none of this produces a glow. What
- * it produces is *intensity* — discrete steps, inverse-video flashes, block characters,
- * a candle drawn heavier — the vocabulary a terminal actually has. That constraint is
- * why the effects read as the chart reacting rather than as chrome laid over it.
+ * it produces is *intensity* — discrete steps, inverse-video flashes, a counted meter,
+ * brackets snapping onto the plot edge — the vocabulary a terminal actually has. That
+ * constraint is why the effects read as the chart reacting rather than as chrome laid
+ * over it.
  *
  * Pure, and computed from the precomputed `Frame[]` rather than from wall time, so the
  * exported MP4 shows exactly the effects the preview did (SPEC §9). This is the reason
@@ -99,30 +100,21 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
 }
 
-/** SPEC §7.3's vocabulary: eight block heights, the way a terminal draws a bar. */
-export const BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
-
 /**
- * A PnL meter as block characters.
+ * A PnL meter as a row of cell fill fractions, 0..1 each.
  *
- * `level` fills the bar left to right; the partial cell at the boundary picks the block
- * height that represents the remainder, which is what makes it read as continuous
- * despite being text.
+ * This started out returning the block characters ▁▂▃…█, which is how a terminal draws
+ * a bar and read correctly in the source. It rendered as tofu boxes: the bundled
+ * JetBrains Mono has no glyphs in U+2580–U+259F. The browser would have found a
+ * fallback font and Node would not, so the same frame would have come out different in
+ * the preview and in the exported MP4 — SPEC §9's pixel identity, lost to a font
+ * dependency. Numbers instead, drawn as rectangles by the HUD, which is what a block
+ * character is anyway.
  */
-export function blockMeter(level: number, width: number): string {
-  if (width <= 0) return '';
-  const filled = clamp(level, 0, 1) * width;
-  const whole = Math.floor(filled);
-  const remainder = filled - whole;
-
-  let out = BLOCKS[BLOCKS.length - 1]!.repeat(Math.min(whole, width));
-  if (whole < width) {
-    // A remainder below one eighth would render as the shortest block rather than as
-    // nothing, overstating an empty meter.
-    out += remainder >= 1 / BLOCKS.length ? BLOCKS[Math.floor(remainder * BLOCKS.length)]! : ' ';
-    out += ' '.repeat(Math.max(0, width - whole - 1));
-  }
-  return out;
+export function meterCells(level: number, count: number): number[] {
+  if (count <= 0) return [];
+  const filled = clamp(level, 0, 1) * count;
+  return Array.from({ length: count }, (_, i) => clamp(filled - i, 0, 1));
 }
 
 /**
