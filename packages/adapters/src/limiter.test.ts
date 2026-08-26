@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTokenBucket } from './limiter.js';
-import { HttpError } from './types.js';
+import { HttpError, VenueUnreachableError } from './types.js';
 import { withRetry } from './withRetry.js';
 
 /** A controllable clock so limiter/backoff tests are instant and deterministic. */
@@ -123,6 +123,36 @@ describe('withRetry (SPEC §10)', () => {
     ).rejects.toThrow(/400/);
 
     expect(calls).toBe(1);
+  });
+
+  it('does not retry an error the adapter raised deliberately', async () => {
+    const clock = fakeClock();
+    let calls = 0;
+
+    // A schema mismatch, a 413, an unusable instrument: the venue has already given its
+    // answer, and asking three more times only multiplies the load.
+    await expect(
+      withRetry(async () => {
+        calls++;
+        throw new Error('venue contract mismatch');
+      }, opts(clock)),
+    ).rejects.toThrow(/contract mismatch/);
+
+    expect(calls).toBe(1);
+    expect(clock.slept).toEqual([]);
+  });
+
+  it('still retries a transport failure', async () => {
+    const clock = fakeClock();
+    let calls = 0;
+    const result = await withRetry(async () => {
+      calls++;
+      if (calls === 1) throw new VenueUnreachableError('https://venue.example', new Error('socket hangup'));
+      return 'ok';
+    }, opts(clock));
+
+    expect(result).toBe('ok');
+    expect(calls).toBe(2);
   });
 
   it('gives up after maxAttempts and rethrows the last error', async () => {

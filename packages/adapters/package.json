@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./hyperliquid": "./src/hyperliquid/index.ts",
     "./hyperliquid/fixtures": "./src/hyperliquid/fixtureStore.node.ts",
-    "./source": "./src/source.node.ts"
+    "./source": "./src/source.node.ts",
+    "./polymarket-perps": "./src/polymarket-perps/index.ts",
+    "./polymarket-perps/fixtures": "./src/polymarket-perps/fixtureStore.node.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

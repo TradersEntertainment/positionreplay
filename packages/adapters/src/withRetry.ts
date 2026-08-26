@@ -4,7 +4,7 @@
  * "Exponential backoff on 429/5xx, respect `Retry-After`, max 4 attempts."
  */
 
-import { HttpError } from './types.js';
+import { HttpError, VenueUnreachableError } from './types.js';
 
 export interface RetryOptions {
   maxAttempts?: number;
@@ -22,13 +22,23 @@ const defaultSleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-/** 429 and 5xx are the venue's problem and may pass; 4xx is ours and will not. */
+/**
+ * Only two things are worth trying again.
+ *
+ * 429/408/5xx are the venue's problem and may pass, and a transport failure (socket
+ * hangup, DNS) may too. Everything else is terminal.
+ *
+ * This used to retry any Error lacking a `status`, on the theory that such errors were
+ * network-level. They are not: a Zod contract mismatch, a 413 "history too old" and an
+ * unusable instrument key all reach here that way, and each was being requested four
+ * times before surfacing — four times the load on a venue that has already told us the
+ * answer will not change.
+ */
 function isRetryable(error: unknown): boolean {
   if (error instanceof HttpError) {
     return error.status === 429 || error.status === 408 || error.status >= 500;
   }
-  // Network-level failures (socket hangup, DNS, timeouts) are worth one more try.
-  return error instanceof Error && !('status' in error);
+  return error instanceof VenueUnreachableError;
 }
 
 export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {

@@ -39,7 +39,11 @@ export type AdapterWarningKind =
   /** More fills share one millisecond than a single page can hold. */
   | 'pagination_collision'
   /** A funding amount is derived from public rates, not the account's charges. */
-  | 'estimated_funding';
+  | 'estimated_funding'
+  /** SPEC §4.4.1 option A: only the current open cycle is retrievable on Perps. */
+  | 'perps_open_positions_only'
+  /** The account holds an instrument missing from the venue's own instrument list. */
+  | 'unknown_instrument';
 
 /**
  * A non-fatal problem the UI must surface.
@@ -268,6 +272,23 @@ export class VenueUnreachableError extends Error {
         `and re-run against those instead.`,
     );
     this.name = 'VenueUnreachableError';
+  }
+}
+
+/**
+ * Thrown for a 413 from Polymarket Perps.
+ *
+ * SPEC §4.4.1: "cycle discovery for positions inherited from a gateway snapshot is
+ * capped at 250,000 account-history rows and returns 413 for cycles older than that
+ * bound. Handle 413 as 'history too old', not as a generic failure."
+ */
+export class HistoryTooOldError extends Error {
+  constructor(readonly detail: string) {
+    super(
+      `The venue will not serve this position's history: it predates the cycle-discovery ` +
+        `limit. ${detail}`,
+    );
+    this.name = 'HistoryTooOldError';
   }
 }
 

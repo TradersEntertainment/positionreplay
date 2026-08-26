@@ -1,0 +1,38 @@
+[
+  {
+    "trade_id": "5001",
+    "order_id": "35007",
+    "instrument_id": 2,
+    "side": "short",
+    "price": "3150.00",
+    "quantity": "4.000",
+    "taker": true,
+    "fee": "5.040000",
+    "fee_asset": "pUSD",
+    "previous_size": "0.000",
+    "previous_entry_price": "0.00",
+    "pnl": "0.000000",
+    "timestamp": 1787205600000,
+    "liquidation": false,
+    "adl": false,
+    "hash": "0xpm1389fixture"
+  },
+  {
+    "trade_id": "5003",
+    "order_id": "35021",
+    "instrument_id": 2,
+    "side": "short",
+    "price": "3310.00",
+    "quantity": "2.000",
+    "taker": true,
+    "fee": "2.648000",
+    "fee_asset": "pUSD",
+    "previous_size": "-4.000",
+    "previous_entry_price": "3150.00",
+    "pnl": "0.000000",
+    "timestamp": 1787277600000,
+    "liquidation": false,
+    "adl": false,
+    "hash": "0xpm138bfixture"
+  }
+]

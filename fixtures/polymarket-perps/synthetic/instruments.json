@@ -1,0 +1,26 @@
+[
+  {
+    "instrument_id": 1,
+    "symbol": "BTC-PERP",
+    "quantity_decimals": 4,
+    "price_decimals": 1,
+    "category": "crypto",
+    "base_asset": "BTC",
+    "quote_asset": "pUSD",
+    "funding_interval": 3600000,
+    "max_leverage": 20,
+    "isolated_only": false
+  },
+  {
+    "instrument_id": 2,
+    "symbol": "ETH-PERP",
+    "quantity_decimals": 3,
+    "price_decimals": 2,
+    "category": "crypto",
+    "base_asset": "ETH",
+    "quote_asset": "pUSD",
+    "funding_interval": 3600000,
+    "max_leverage": 20,
+    "isolated_only": false
+  }
+]

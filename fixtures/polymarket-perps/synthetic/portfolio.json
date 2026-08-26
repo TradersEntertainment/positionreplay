@@ -1,0 +1,15 @@
+{
+  "equity": "128400.500000",
+  "positions": [
+    {
+      "instrument_id": 1,
+      "size": "0.4000",
+      "entry_price": "91062.50"
+    },
+    {
+      "instrument_id": 2,
+      "size": "-6.0000",
+      "entry_price": "3203.33"
+    }
+  ]
+}
