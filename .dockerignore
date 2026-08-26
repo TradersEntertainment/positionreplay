@@ -1,0 +1,28 @@
+# Build context for apps/worker/Dockerfile.
+#
+# node_modules is the one that matters rather than merely being wasteful: pnpm fills a
+# workspace with symlinks into the host's store, and the Dockerfile copies sources
+# *after* installing. Without this, those host symlinks would land on top of the
+# container's freshly installed tree and dangle. Railway builds from git, which carries
+# no node_modules, so this bites the documented local build:
+#
+#     docker build -f apps/worker/Dockerfile -t trade-replay-worker .
+node_modules
+**/node_modules
+
+# Build output. The image builds its own; copying a host build in would ship whatever
+# happened to be lying around.
+dist
+**/dist
+.next
+**/.next
+
+# Nothing in the image reads these, and .git in particular is most of the context size.
+.git
+.github
+.turbo
+**/.turbo
+.data
+fixtures
+docs
+*.md
