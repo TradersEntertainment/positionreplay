@@ -18,6 +18,7 @@
  */
 
 import { SUPPORTED_VENUES, VENUE_LABELS } from '@trade-replay/adapters';
+import { buildCommit } from '../lib/build';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 
@@ -141,6 +142,8 @@ function VenueChip({ venue }: { venue: string }): ReactNode {
 }
 
 export function VenueBar(): ReactNode {
+  const commit = buildCommit();
+
   return (
     <header className="border-b border-tr-line" data-testid="venue-bar">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-8 py-3">
@@ -151,6 +154,13 @@ export function VenueBar(): ReactNode {
         {PLANNED.map((venue) => (
           <VenueChip key={venue} venue={venue} />
         ))}
+        {commit ? (
+          // Pushed to the right, dim, out of the way. It answers "is my change live?"
+          // without being something a visitor has to read.
+          <span className="ml-auto text-[10px] text-tr-dim" data-testid="build-commit">
+            build {commit}
+          </span>
+        ) : null}
       </div>
     </header>
   );

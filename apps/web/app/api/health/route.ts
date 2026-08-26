@@ -6,6 +6,7 @@
  * healthcheck that fails the deploy for a missing optimisation is worse than useless.
  */
 
+import { buildCommit } from '@/lib/build';
 import { cacheAvailable, cacheDatabasePath } from '@/lib/data';
 import { renderJobStore } from '@/lib/render';
 
@@ -16,6 +17,10 @@ export function GET(): Response {
   return Response.json(
     {
       status: 'ok',
+      // Which build answered. In a monorepo a change to packages/renderer leaves every
+      // file under apps/web untouched, so the page looks identical whether it deployed
+      // or not — this is the one place that says.
+      commit: buildCommit(),
       cache: cache ? 'ready' : 'unavailable',
       // The render worker polls this exact file (SPEC §15). Reported so a worker
       // pointed at a different one is a one-request diagnosis rather than a mystery.

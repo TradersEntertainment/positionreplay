@@ -169,9 +169,9 @@ RENDER_MAX_FRAMES=3000     # refuses a replay longer than this
 In order — each step rules out one class of failure:
 
 ```bash
-# 1. web is up and its database opened
+# 1. web is up, its database opened, and WHICH BUILD answered
 curl https://<web>/api/health
-# {"status":"ok","cache":"ready","database":"/data/cache.db","renderQueue":"ready"}
+# {"status":"ok","commit":"1b46cad","cache":"ready","database":"/data/cache.db","renderQueue":"ready"}
 
 # 2. the worker booted (its log, first three lines)
 #    [worker] ffmpeg version ...
@@ -187,6 +187,24 @@ curl -X POST https://<web>/api/render/worker/claim
 Then open a replay and press **Download MP4**. If it sits on "Queued on the render
 worker…" forever, the worker is not reaching the queue — check `WEB_URL` and that both
 services carry the same token.
+
+### "I pushed and nothing deployed"
+
+Check the running commit before checking anything else: `commit` in the healthcheck
+above, or the dim `build <sha>` at the right of the header on any page. If it is not the
+commit you pushed, the code is not live and no amount of looking at the page will tell
+you that — the page renders identically either way.
+
+The usual cause in this repo is **Watch Paths**. A monorepo tempts you into setting the
+`web` service to watch `apps/web/**`, and then a commit touching only
+`packages/renderer` or `packages/adapters` is correctly skipped — while being exactly
+the kind of commit that changes what the chart draws or which venues work. Both packages
+are compiled into `apps/web`, so either leave Watch Paths empty or include
+`packages/**` and `pnpm-lock.yaml` in it. The same applies to `worker`, which also
+builds `packages/renderer`.
+
+If the commit is right and the behaviour still is not, it is a stale build, not a missing
+deploy: redeploy with the cache cleared.
 
 ---
 
