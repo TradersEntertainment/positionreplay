@@ -1,0 +1,23 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.next/
+*.tsbuildinfo
+
+# tooling caches
+.turbo/
+coverage/
+
+# secrets — see SPEC.md §15.2 gotcha 6: this must exist BEFORE the first push
+.env
+.env.*
+!.env.example
+
+# local artifacts
+out.png
+out/
+*.log
+.DS_Store

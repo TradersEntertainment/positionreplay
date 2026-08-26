@@ -1,0 +1,30 @@
+{
+  "name": "trade-replay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "turbo typecheck",
+    "lint": "eslint .",
+    "episodes": "tsx apps/cli/src/episodes.ts",
+    "render:still": "tsx apps/cli/src/render-still.ts",
+    "verify:m1": "tsx apps/cli/src/verify-m1.ts",
+    "capture:hl": "tsx scripts/capture-hl.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^22.19.0",
+    "eslint": "^9.39.1",
+    "tsx": "^4.20.6",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^3.2.4"
+  }
+}
