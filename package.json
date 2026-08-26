@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "build": "turbo build",
     "capture:hl": "tsx scripts/capture-hl.ts",
     "capture:pm": "tsx scripts/capture-pm.ts",
     "capture:binance": "tsx scripts/capture-binance.ts",
@@ -32,6 +33,7 @@
     "@trade-replay/cache": "workspace:*",
     "@trade-replay/core": "workspace:*",
     "@types/node": "^22.19.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.1",
     "playwright": "^1.62.1",
     "tsx": "^4.20.6",

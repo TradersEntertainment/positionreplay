@@ -23,6 +23,9 @@ importers:
       '@types/node':
         specifier: ^22.19.0
         version: 22.20.1
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       eslint:
         specifier: ^9.39.1
         version: 9.39.5(jiti@2.7.0)
@@ -132,6 +135,19 @@ importers:
       '@trade-replay/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
+      better-sqlite3:
+        specifier: ^12.4.1
+        version: 12.11.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      tsx:
+        specifier: ^4.20.6
+        version: 4.23.12
 
   packages/adapters:
     dependencies:

@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "next build",
-    "dev": "next dev",
     "prebuild": "node scripts/copy-gif-worker.mjs",
+    "build": "next build && node scripts/finalize-standalone.mjs",
     "predev": "node scripts/copy-gif-worker.mjs",
-    "start": "next start",
+    "dev": "next dev",
+    "start": "node .next/standalone/apps/web/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

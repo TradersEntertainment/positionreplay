@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "build": "node build.mjs",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -13,6 +15,12 @@
     "@trade-replay/adapters": "workspace:*",
     "@trade-replay/cache": "workspace:*",
     "@trade-replay/core": "workspace:*",
-    "@trade-replay/renderer": "workspace:*"
+    "@trade-replay/renderer": "workspace:*",
+    "better-sqlite3": "^12.4.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.20.6"
   }
 }
