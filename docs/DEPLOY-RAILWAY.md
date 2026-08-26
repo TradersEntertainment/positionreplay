@@ -29,7 +29,7 @@ and it is why `web` holds the finished MP4s rather than the worker.
 | Setting | Value |
 |---|---|
 | Build Command | `pnpm install --frozen-lockfile && pnpm --filter @trade-replay/web build` |
-| Start Command | `pnpm --filter @trade-replay/web start` |
+| Start Command | `node apps/web/.next/standalone/apps/web/server.js` |
 | Watch Paths | `apps/web/**`, `packages/**` |
 | Healthcheck Path | `/api/health` |
 | Replicas | **1** |
@@ -43,6 +43,11 @@ their problem and are ours.
 `next start` is **not** the start command. `output: 'standalone'` makes it serve a stale
 build; the standalone server is the real one, and `build` copies `.next/static` and
 `public` into it (Next does not, because it assumes a CDN).
+
+Node is invoked directly rather than through `pnpm --filter`, which would put pnpm and
+workspace resolution on the runtime path for no benefit — the standalone output already
+carries every dependency it needs. The server binds `0.0.0.0` on `$PORT`, which is what
+Railway's healthcheck expects; nothing has to be configured for that.
 
 ### Volume
 Mount path `/data`, 1 GB to start. Candle data is small and it is text.
@@ -185,6 +190,7 @@ services carry the same token.
 | Symptom | Cause |
 |---|---|
 | Page renders unstyled, chunks 404 | `next start` used instead of the standalone server |
+| Healthcheck: every attempt "service unavailable", `1/1 replicas never became healthy` | Nothing is listening. The build succeeded, so read **Deploy Logs**, not Build Logs — the container's own output says whether the process started |
 | `cache: "unavailable"` in health | `DATABASE_URL` not pointing at the mounted volume |
 | MP4 stuck on "Queued" | worker cannot reach `WEB_URL`, or the tokens differ |
 | Worker crash loop, `PREFLIGHT FAILED`, `spawnSync ffmpeg ENOENT` | No ffmpeg in the image. `NIXPACKS_APT_PKGS` does nothing under Railpack, and `apps/worker/nixpacks.toml` is not read from a root build — use the Dockerfile |
