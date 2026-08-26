@@ -33,12 +33,20 @@ export function createScale(): ScaleState {
   return { min: 0, max: 0, initialized: false };
 }
 
-/** High/low across the visible bars, widened by padding and by the entry line. */
+/**
+ * High/low across the visible bars, widened by padding, the entry line and the fills.
+ *
+ * Fill prices are included for the same reason the entry line is, and it is not
+ * hypothetical: a CSV's symbol maps to a Binance spot pair whose range need not
+ * contain the prices the user actually traded at, and a marker outside the y-domain
+ * is drawn outside the plot — over the HUD.
+ */
 export function computeBounds(
   series: PriceSeries,
   visibleUpTo: number,
   avgEntry: number | null,
   padding = BOUNDS_PADDING,
+  fillPrices: readonly number[] = [],
 ): Bounds {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
@@ -64,6 +72,12 @@ export function computeBounds(
   if (avgEntry !== null && Number.isFinite(avgEntry)) {
     if (avgEntry < min) min = avgEntry;
     if (avgEntry > max) max = avgEntry;
+  }
+
+  for (const price of fillPrices) {
+    if (!Number.isFinite(price)) continue;
+    if (price < min) min = price;
+    if (price > max) max = price;
   }
 
   if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 1 };

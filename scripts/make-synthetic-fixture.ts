@@ -10,12 +10,26 @@
  * Run: pnpm tsx scripts/make-synthetic-fixture.ts
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'fixtures', 'hyperliquid', 'synthetic');
+
+/**
+ * Drop the cache built from the previous version of this fixture.
+ *
+ * SPEC §10 treats a closed candle as immutable and caches it forever, which is right
+ * for a venue and wrong for a file that was just regenerated: without this, the next
+ * run is served the *old* bars and the fixture appears not to have changed at all.
+ */
+function dropFixtureCache(venue: string, fixture: string): void {
+  const slug = `${venue}-${fixture}`.replace(/[^a-zA-Z0-9_-]+/g, '-');
+  const base = join(ROOT, '.data', `cache-fixture-${slug}.db`);
+  for (const suffix of ['', '-shm', '-wal']) rmSync(`${base}${suffix}`, { force: true });
+}
+
 
 /** Deterministic PRNG — the fixture must be byte-identical on every regeneration. */
 function mulberry32(seed: number): () => number {
@@ -316,3 +330,6 @@ write('meta.json', {
 });
 
 console.log('Done.');
+
+// Last, so a generator that threw leaves the old fixture and its cache consistent.
+dropFixtureCache('hyperliquid', 'synthetic');

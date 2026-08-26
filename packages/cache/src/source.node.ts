@@ -10,6 +10,7 @@ import { createSource, findWorkspaceRoot } from '@trade-replay/adapters/source';
 import type { CreateSourceOptions, DataSource } from '@trade-replay/adapters/source';
 import { createCandleCache } from './candles.js';
 import { createFillCache } from './fills.js';
+import { createCsvDocumentStore } from './csvDocuments.js';
 import { openCache } from './db.js';
 
 /**
@@ -40,7 +41,11 @@ export interface CachedSourceOptions extends Omit<CreateSourceOptions, 'cache'> 
  * taking the app down with it.
  */
 export function createCachedSource(fixture?: string, options: CachedSourceOptions = {}): DataSource {
-  if (options.cache === false) return createSource(fixture);
+  // The venue has to survive every path out of here: without it a Perps or CSV caller
+  // silently gets the Hyperliquid fixture directory instead of its own.
+  const venueOption = options.venue ? { venue: options.venue } : {};
+
+  if (options.cache === false) return createSource(fixture, venueOption);
 
   try {
     const handle = openCache({
@@ -48,7 +53,10 @@ export function createCachedSource(fixture?: string, options: CachedSourceOption
       cwd: findWorkspaceRoot(),
     });
     return createSource(fixture, {
-      ...(options.venue ? { venue: options.venue } : {}),
+      ...venueOption,
+      // SPEC §4.6: uploaded CSVs live in the same database. A fixture supplies its own
+      // document and overrides this, so a fixture run still needs no upload.
+      csvStore: createCsvDocumentStore(handle.db),
       cache: {
         candleCache: createCandleCache(handle.db),
         fillCache: createFillCache(handle.db),
@@ -56,6 +64,6 @@ export function createCachedSource(fixture?: string, options: CachedSourceOption
       },
     });
   } catch {
-    return createSource(fixture);
+    return createSource(fixture, venueOption);
   }
 }

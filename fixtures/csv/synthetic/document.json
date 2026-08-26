@@ -1,0 +1,27 @@
+{
+  "filename": "trades.csv",
+  "mapping": {
+    "columns": {
+      "timestamp": 0,
+      "symbol": 1,
+      "side": 2,
+      "size": 4,
+      "fee": 5,
+      "note": 6,
+      "price": 3
+    },
+    "timestampFormat": "iso8601",
+    "numberFormat": "dot"
+  },
+  "symbols": {
+    "BTC-PERP": {
+      "kind": "binance",
+      "symbol": "BTCUSDT"
+    },
+    "SHIB-PERP": {
+      "kind": "ohlcv",
+      "text": "",
+      "filename": "SHIB-PERP.csv"
+    }
+  }
+}

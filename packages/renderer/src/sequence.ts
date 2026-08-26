@@ -56,7 +56,7 @@ export function createSequenceRenderer(
       }
       for (let i = lastIndex + 1; i < index; i++) {
         const skipped = frames[i];
-        if (skipped) advanceScale(scale, series, skipped, options.easing);
+        if (skipped) advanceScale(scale, series, skipped, episode, options.easing);
       }
       lastIndex = index;
 

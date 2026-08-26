@@ -43,6 +43,21 @@ export function num(value: number, decimals = 4): string {
   }).format(value);
 }
 
+/**
+ * A price, at whatever precision it actually has.
+ *
+ * A fixed decimal count prints a memecoin's 0.0000241 entry as "0", which reads as a
+ * missing value rather than a small one — and CLAUDE.md is explicit that a number in
+ * the output has to be the number. Significant figures scale instead: four decimals
+ * for BTC, ten for SHIB.
+ */
+export function price(value: number): string {
+  const magnitude = Math.abs(value);
+  if (magnitude === 0 || !Number.isFinite(magnitude)) return num(value);
+  const decimals = magnitude >= 1 ? 4 : Math.min(12, Math.ceil(-Math.log10(magnitude)) + 4);
+  return num(value, decimals);
+}
+
 export function date(ts: number): string {
   return new Date(ts).toISOString().replace('T', ' ').slice(0, 16);
 }

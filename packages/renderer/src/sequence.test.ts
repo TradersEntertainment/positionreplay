@@ -108,9 +108,9 @@ describe('createSequenceRenderer', () => {
 
     // The scale after both paths must agree, which is what actually drives the pixels.
     const steppedScale = createScale();
-    for (let i = 0; i < 30; i++) advanceScale(steppedScale, series, frames[i]!);
+    for (let i = 0; i < 30; i++) advanceScale(steppedScale, series, frames[i]!, episode);
     const jumpedScale = createScale();
-    for (let i = 0; i < 30; i++) advanceScale(jumpedScale, series, frames[i]!);
+    for (let i = 0; i < 30; i++) advanceScale(jumpedScale, series, frames[i]!, episode);
     expect(jumpedScale).toEqual(steppedScale);
   });
 
@@ -121,7 +121,7 @@ describe('createSequenceRenderer', () => {
 
     const byHand = recordingContext();
     const scale = createScale();
-    for (let i = 0; i < 40; i++) advanceScale(scale, series, frames[i]!);
+    for (let i = 0; i < 40; i++) advanceScale(scale, series, frames[i]!, episode);
     renderFrame(byHand.ctx, frames[40]!, episode, series, scale, darkTheme, LAYOUT);
 
     expect(viaSequence.calls).toEqual(byHand.calls);

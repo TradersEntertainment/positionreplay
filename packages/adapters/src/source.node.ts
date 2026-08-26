@@ -12,11 +12,20 @@ import { existsSync, readdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import type { VenueId } from '@trade-replay/core';
 import { createUnlimitedLimiter } from './limiter.js';
-import type { AdapterContext, AdapterWarning, CandleCache, FetchLike, FillCache } from './types.js';
+import type {
+  AdapterContext,
+  AdapterWarning,
+  CandleCache,
+  FetchLike,
+  FillCache,
+} from './types.js';
+import type { CsvDocument, CsvDocumentStore } from './csv/document.js';
 import { createFixtureFetch } from './hyperliquid/fixtureFetch.js';
 import { loadFixtureStore } from './hyperliquid/fixtureStore.node.js';
 import { createPerpsFixtureFetch } from './polymarket-perps/fixtureFetch.js';
 import { loadPerpsFixtureStore } from './polymarket-perps/fixtureStore.node.js';
+import { createBinanceFixtureFetch } from './csv/fixtureFetch.js';
+import { loadCsvFixtureStore } from './csv/fixtureStore.node.js';
 
 /**
  * Walk up for the workspace root.
@@ -52,11 +61,26 @@ export function resolveFixtureDir(nameOrPath: string, venue: VenueId = 'hyperliq
  * Fixture replay differs per venue: Hyperliquid routes on a POST body, Perps on a GET
  * URL. Each adapter owns its own replay, so this only has to pick one.
  */
-function fixtureFetchFor(venue: VenueId, dir: string): { fetch: FetchLike; warning?: string } {
+function fixtureFetchFor(
+  venue: VenueId,
+  dir: string,
+): { fetch: FetchLike; warning?: string; csvStore?: CsvDocumentStore; defaultAccount?: string } {
   if (venue === 'polymarket-perps') {
     const store = loadPerpsFixtureStore(dir);
     return {
       fetch: createPerpsFixtureFetch(store),
+      ...(store.meta.warning ? { warning: store.meta.warning } : {}),
+    };
+  }
+
+  if (venue === 'csv') {
+    // A CSV fixture carries its own uploaded document as well as the Binance
+    // responses, so a fixture run needs no database and no prior upload step.
+    const store = loadCsvFixtureStore(dir);
+    return {
+      fetch: createBinanceFixtureFetch(store),
+      csvStore: readOnlyStore(store.document),
+      defaultAccount: store.document.id,
       ...(store.meta.warning ? { warning: store.meta.warning } : {}),
     };
   }
@@ -68,6 +92,14 @@ function fixtureFetchFor(venue: VenueId, dir: string): { fetch: FetchLike; warni
   };
 }
 
+/** Serves exactly the fixture's document; `put` is a no-op, since a fixture is fixed. */
+function readOnlyStore(document: CsvDocument): CsvDocumentStore {
+  return {
+    get: async (id) => (id === document.id ? document : null),
+    put: async () => undefined,
+  };
+}
+
 export interface DataSource {
   ctx: AdapterContext;
   /** Collected as the adapter runs; surface these, never swallow them. */
@@ -75,6 +107,16 @@ export interface DataSource {
   label: string;
   /** Set when the data is not real, so output can never be mistaken for fact. */
   provenanceWarning?: string;
+  /**
+   * The account this source is about, when it knows.
+   *
+   * Only CSV fixtures set it, and structurally so: a CSV's account identifier is a
+   * content hash of the uploaded file, which nobody can type and which changes
+   * whenever the fixture is regenerated. A wallet fixture has no such problem — the
+   * address is typed by the caller — so those deliberately leave this unset rather
+   * than quietly overriding what was asked for.
+   */
+  defaultAccount?: string;
   /** Release the cache connection, if one was opened. */
   close(): void;
 }
@@ -112,6 +154,13 @@ export interface CreateSourceOptions {
    * which wires the two together from the correct side.
    */
   cache?: SourceCache | undefined;
+  /**
+   * SPEC §4.6: where uploaded CSVs are read from.
+   *
+   * Live runs pass the SQLite-backed store from `@trade-replay/cache`; a CSV fixture
+   * supplies its own and this is ignored.
+   */
+  csvStore?: CsvDocumentStore | undefined;
 }
 
 /**
@@ -125,9 +174,10 @@ export function createSource(fixture?: string, options: CreateSourceOptions = {}
   };
 
   const cache = options.cache;
-  const cacheCtx: AdapterContext = cache
-    ? { candleCache: cache.candleCache, fillCache: cache.fillCache }
-    : {};
+  const cacheCtx: AdapterContext = {
+    ...(cache ? { candleCache: cache.candleCache, fillCache: cache.fillCache } : {}),
+    ...(options.csvStore ? { csvStore: options.csvStore } : {}),
+  };
 
   if (fixture === undefined) {
     return {
@@ -146,7 +196,8 @@ export function createSource(fixture?: string, options: CreateSourceOptions = {}
       `No ${venue} fixture at ${dir}.\n` +
         `  Available: ${available}\n` +
         `  Generate a synthetic one:  pnpm tsx scripts/make-synthetic-fixture.ts (hyperliquid)\n` +
-        `                             pnpm tsx scripts/make-perps-fixture.ts (polymarket-perps)`,
+        `                             pnpm tsx scripts/make-perps-fixture.ts (polymarket-perps)\n` +
+        `                             pnpm tsx scripts/make-csv-fixture.ts (csv)`,
     );
   }
 
@@ -159,10 +210,12 @@ export function createSource(fixture?: string, options: CreateSourceOptions = {}
       sleep: async () => undefined,
       onWarning,
       ...cacheCtx,
+      ...(replay.csvStore ? { csvStore: replay.csvStore } : {}),
     },
     warnings,
     label: `fixture ${dir.replace(findWorkspaceRoot(), '').replace(/^[/\\]/, '')}`,
     ...(replay.warning ? { provenanceWarning: replay.warning } : {}),
+    ...(replay.defaultAccount ? { defaultAccount: replay.defaultAccount } : {}),
     close: () => cache?.close(),
   };
 }

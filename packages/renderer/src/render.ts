@@ -25,7 +25,7 @@ import { drawMarkers } from './layers/markers.js';
 import { drawSeries } from './layers/series.js';
 import { drawWatermark } from './layers/watermark.js';
 import type { LayerContext, MarkerInfo } from './layers/context.js';
-import { computeBounds, computeMetrics, stepScale, xDomainFor } from './scale.js';
+import { BOUNDS_PADDING, computeBounds, computeMetrics, stepScale, xDomainFor } from './scale.js';
 import type { ScaleState } from './scale.js';
 import type { Canvas2D, RenderLayout, Theme } from './types.js';
 
@@ -93,13 +93,35 @@ export function advanceScale(
   scale: ScaleState,
   series: PriceSeries,
   frame: Frame,
+  episode: PositionEpisode,
   easing?: number,
 ): void {
   stepScale(
     scale,
-    computeBounds(series, frame.visibleUpTo, frame.avgEntry > 0 ? frame.avgEntry : null),
+    computeBounds(
+      series,
+      frame.visibleUpTo,
+      frame.avgEntry > 0 ? frame.avgEntry : null,
+      BOUNDS_PADDING,
+      visibleFillPrices(episode, frame),
+    ),
     easing,
   );
+}
+
+/**
+ * Prices of the fills that have already happened at this frame.
+ *
+ * Only the ones already drawn: widening the axis for a fill still in the future would
+ * reveal where the position is about to go, which is the one thing a replay must not
+ * do.
+ */
+function visibleFillPrices(episode: PositionEpisode, frame: Frame): number[] {
+  const prices: number[] = [];
+  for (const step of episode.steps) {
+    if (step.fill.ts <= frame.t) prices.push(step.fill.price);
+  }
+  return prices;
 }
 
 export function renderFrame(
@@ -117,7 +139,7 @@ export function renderFrame(
   const totalBars = times.length;
 
   // Step the scale before drawing so every layer shares one view of the axis.
-  advanceScale(scale, series, frame, options.easing);
+  advanceScale(scale, series, frame, episode, options.easing);
 
   const context: LayerContext = {
     frame,

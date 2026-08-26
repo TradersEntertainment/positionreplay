@@ -100,11 +100,15 @@ async function main(): Promise<number> {
     },
   });
 
-  if (values.help || positionals.length === 0) {
+  // A CSV fixture's account is a content hash of the uploaded file, which nobody can
+  // type; the fixture supplies it. Every other venue still needs an address.
+  const fixtureCsv = values.venue === 'csv' && values.fixture !== undefined;
+  if (values.help || (positionals.length === 0 && !fixtureCsv)) {
     console.log(`
 pnpm render:still <address> [options]
 
-  --venue <v>         hyperliquid (default) or polymarket-perps
+  --venue <v>         hyperliquid (default), polymarket-perps or csv
+                      (with --venue csv --fixture, <address> may be omitted)
   --fixture [name]    Replay a recorded fixture instead of calling the venue
   --episode <i>       Episode index (default: largest absolute PnL)
   --frame <i>         Frame index (default: the final frame)
@@ -127,7 +131,10 @@ pnpm render:still <address> [options]
   const source = createCachedSource(values.fixture === '' ? 'synthetic' : values.fixture, {
     venue: adapter.id,
   });
-  const input = await adapter.parseInput(positionals[0]!, source.ctx);
+  const input = await adapter.parseInput(
+    positionals[0] ?? source.defaultAccount ?? '',
+    source.ctx,
+  );
 
   console.log(`${dim('source  ')} ${source.label}`);
   console.log(`${dim('address ')} ${cyan(input.address)}`);
@@ -194,7 +201,7 @@ pnpm render:still <address> [options]
 
   const scale = createScale();
   // Replay the easing so this frame is framed exactly as the animation would show it.
-  for (let i = 0; i < frameIndex; i++) advanceScale(scale, series, frames[i]!);
+  for (let i = 0; i < frameIndex; i++) advanceScale(scale, series, frames[i]!, episode);
 
   renderFrame(
     ctx as unknown as Canvas2D,

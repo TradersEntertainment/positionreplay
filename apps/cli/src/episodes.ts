@@ -15,13 +15,16 @@ import { VENUE_LIMITATIONS, adapterFor, isSupportedVenue, SUPPORTED_VENUES } fro
 import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
-import { bold, cyan, date, dim, duration, num, red, signed, table, usd, yellow } from './format.js';
+import { bold, cyan, date, dim, duration, num, price, red, signed, table, usd, yellow } from './format.js';
 import { createCachedSource } from '@trade-replay/cache';
 
 const USAGE = `
 ${bold('pnpm episodes')} <address> [options]
 
-  --venue <v>        hyperliquid (default) or polymarket-perps
+  <address>          A wallet for hyperliquid / polymarket-perps. For --venue csv it is
+                     the uploaded file's id; with --fixture it may be omitted.
+
+  --venue <v>        hyperliquid (default), polymarket-perps or csv
   --fixture [name]   Replay a recorded fixture instead of calling the venue.
                      Defaults to "synthetic". Accepts a name under fixtures/hyperliquid/
                      or a path.
@@ -57,12 +60,15 @@ function parseOptions(argv: string[]): ParseResult {
   });
 
   if (values.help) return { kind: 'usage', exitCode: 0 };
-  if (positionals.length === 0) return { kind: 'usage', exitCode: 1 };
+  // A CSV fixture carries its own uploaded document, so there is nothing for the
+  // caller to type; every other venue still needs an account.
+  const fixtureCsv = values.venue === 'csv' && values.fixture !== undefined;
+  if (positionals.length === 0 && !fixtureCsv) return { kind: 'usage', exitCode: 1 };
 
   return {
     kind: 'run',
     options: {
-      address: positionals[0]!,
+      address: positionals[0] ?? '',
       venue: values.venue ?? 'hyperliquid',
     // `--fixture` with no value arrives as an empty string; treat that as the default.
       fixture: values.fixture === '' ? 'synthetic' : values.fixture,
@@ -100,7 +106,7 @@ function renderTable(episodes: PositionEpisode[], fundingKnown: boolean): string
     e.closedAt === null ? yellow('OPEN') : date(e.closedAt),
     duration((e.closedAt ?? Date.now()) - e.openedAt),
     num(e.peakSize),
-    num(e.avgEntry, 4),
+    price(e.avgEntry),
     signed(e.realizedPnl),
     usd(e.totalFees),
     fundingKnown ? signed(e.totalFunding) : dim('—'),
@@ -131,7 +137,9 @@ async function main(): Promise<number> {
 
   const adapter = adapterFor(options.venue);
   const source = createCachedSource(options.fixture, { venue: adapter.id });
-  const input = await adapter.parseInput(options.address, source.ctx);
+  // A CSV fixture's account is a content hash nobody can be expected to type.
+  const account = options.address === '' ? (source.defaultAccount ?? '') : options.address;
+  const input = await adapter.parseInput(account, source.ctx);
 
   // SPEC §4.4.1 option A: the limitation has to be visible before any numbers are.
   const limitation = VENUE_LIMITATIONS[adapter.id];
@@ -207,12 +215,14 @@ async function main(): Promise<number> {
   }
 
   if (!fundingKnown) {
-    console.log(
-      dim(
-        `  net excludes funding: ${adapter.id} serves per-account funding only to an ` +
-          `authenticated session, so it is unknown rather than zero.`,
-      ),
-    );
+    // Why funding is missing differs by venue, and "unknown" without the reason reads
+    // as a bug in the tool rather than a limit of the source.
+    const reason =
+      adapter.id === 'csv'
+        ? 'a trades file carries no funding payments, so none can be read from it'
+        : `${adapter.id} serves per-account funding only to an authenticated session, ` +
+          `so it is unknown rather than zero`;
+    console.log(dim(`  net excludes funding: ${reason}.`));
   }
 
   if (source.warnings.length > 0) {

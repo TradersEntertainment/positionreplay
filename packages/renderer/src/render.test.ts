@@ -1,8 +1,8 @@
 import { buildEpisodes, buildFrames } from '@trade-replay/core';
 import type { Fill, FundingEvent, PositionEpisode, PriceSeries } from '@trade-replay/core';
 import { describe, expect, it } from 'vitest';
-import { renderFrame } from './render.js';
-import { createScale } from './scale.js';
+import { advanceScale, renderFrame } from './render.js';
+import { computeMetrics, createScale } from './scale.js';
 import { darkTheme, lightTheme } from './theme.js';
 import type { Canvas2D } from './types.js';
 
@@ -591,5 +591,67 @@ describe('renderFrame — notices stay readable', () => {
 
     expect(firstNotice).toBeDefined();
     if (boughtValue) expect(firstNotice!.y).toBeGreaterThan(boughtValue.y);
+  });
+});
+
+describe('markers whose price is outside the candle range', () => {
+  /**
+   * A CSV maps its symbol to a Binance spot pair, and nothing guarantees that pair's
+   * range contains the prices the user actually filled at. Before this was handled,
+   * the marker's label was drawn past the plot and printed over the HUD.
+   */
+  function offRangeScenario(): ReturnType<typeof scenario> {
+    const episode = buildEpisodes(
+      [
+        fill({ id: 'open', ts: 10 * MIN, side: 'buy', price: 60, size: 10 }),
+        fill({ id: 'close', ts: 40 * MIN, side: 'sell', price: 400, size: 10 }),
+      ],
+      HL,
+    )[0]!;
+    // Bars sit between 100 and 149; both fills are well outside that.
+    const series = makeSeries(50, (i) => 100 + i);
+    return { episode, series, frames: buildFrames(episode, series) };
+  }
+
+  it('widens the axis so an off-range fill is still on the chart', () => {
+    const { episode, series, frames } = offRangeScenario();
+    const scale = createScale();
+    for (const frame of frames) advanceScale(scale, series, frame, episode);
+
+    // The bars alone top out at 149; the closing fill at 400 drags the axis far past
+    // that. It does not arrive exactly at 400 because §7.2's easing is still closing
+    // the gap when the replay ends — the clamp in markers.ts covers those frames.
+    expect(scale.min).toBeLessThan(60);
+    expect(scale.max).toBeGreaterThan(300);
+  });
+
+  it('does not widen for a fill that has not happened yet', () => {
+    // Revealing the closing price through the axis would spoil the replay.
+    const { episode, series, frames } = offRangeScenario();
+    const scale = createScale();
+    advanceScale(scale, series, frames[0]!, episode);
+    expect(scale.max).toBeLessThan(400);
+  });
+
+  it('keeps every marker label inside the plot', () => {
+    const { episode, series, frames } = offRangeScenario();
+    const { ctx, calls } = recordingContext();
+    const scale = createScale();
+
+    // Frame 11 is right after the open: the scale has only started easing toward the
+    // widened target, so this is the frame where a label used to escape the plot.
+    for (let i = 0; i <= 11; i++) advanceScale(scale, series, frames[i]!, episode);
+    renderFrame(ctx, frames[11]!, episode, series, scale, darkTheme, LAYOUT);
+
+    const metrics = computeMetrics(LAYOUT);
+    const labelYs = calls
+      .filter((c) => c.op === 'fillText' && /^(OPEN|ADD|TRIM|CLOSE|FLIP)/.test(String(c.args[0])))
+      .map((c) => Number(c.args[2]));
+
+    expect(labelYs.length).toBeGreaterThan(0);
+    for (const y of labelYs) {
+      expect(y).toBeGreaterThanOrEqual(metrics.plot.y0);
+      expect(y).toBeLessThanOrEqual(metrics.plot.y1);
+    }
   });
 });

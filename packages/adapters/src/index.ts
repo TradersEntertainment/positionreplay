@@ -16,5 +16,6 @@ export * from './csv/parse.js';
 export * from './csv/mapping.js';
 export * from './csv/ohlcv.js';
 export * from './csv/document.js';
+export { createBinanceFixtureFetch, type BinanceFixtureStore } from './csv/fixtureFetch.js';
 export { BINANCE_INTERVALS, UnknownSymbolError, symbolCandidates, createBinanceClient } from './csv/binance.js';
 export * from './registry.js';

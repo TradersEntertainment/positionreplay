@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PriceSeries } from '@trade-replay/core';
 import {
+  BOUNDS_PADDING,
   computeBounds,
   computeMetrics,
   createScale,
@@ -178,5 +179,50 @@ describe('computeMetrics — resolution independence (SPEC §9)', () => {
   it('leaves room on the right for the price axis', () => {
     const m = computeMetrics({ width: 1920, height: 1080, dpr: 1 });
     expect(1920 - m.plot.x1).toBeGreaterThanOrEqual(m.axisWidth);
+  });
+});
+
+describe('computeBounds — fill prices outside the candle range', () => {
+  const series: PriceSeries = {
+    kind: 'ohlcv',
+    instrument: 'BTC',
+    interval: '1h',
+    candles: Array.from({ length: 10 }, (_, i) => ({
+      t: i * 3_600_000,
+      o: 100,
+      h: 101,
+      l: 99,
+      c: 100,
+      v: 1,
+    })),
+  };
+
+  it('widens to include a fill above every bar', () => {
+    // A CSV whose symbol maps to a Binance pair that never traded this high still has
+    // to show the marker. Off-screen, it would paint over the HUD instead.
+    const bounds = computeBounds(series, 9, null, BOUNDS_PADDING, [140]);
+    expect(bounds.max).toBeGreaterThan(140);
+  });
+
+  it('widens to include a fill below every bar', () => {
+    const bounds = computeBounds(series, 9, null, BOUNDS_PADDING, [60]);
+    expect(bounds.min).toBeLessThan(60);
+  });
+
+  it('ignores fill prices with no bars in range', () => {
+    const bounds = computeBounds(series, 9, null, BOUNDS_PADDING, []);
+    expect(bounds.max).toBeLessThan(110);
+  });
+
+  it('still honours the entry line alongside fill prices', () => {
+    const bounds = computeBounds(series, 9, 200, BOUNDS_PADDING, [60]);
+    expect(bounds.min).toBeLessThan(60);
+    expect(bounds.max).toBeGreaterThan(200);
+  });
+
+  it('ignores a non-finite fill price rather than collapsing the axis', () => {
+    const bounds = computeBounds(series, 9, null, BOUNDS_PADDING, [Number.NaN]);
+    expect(Number.isFinite(bounds.min)).toBe(true);
+    expect(Number.isFinite(bounds.max)).toBe(true);
   });
 });

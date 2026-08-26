@@ -16,6 +16,12 @@ import type { LayerContext, MarkerInfo } from './context.js';
 /** SPEC §7.1: "Fade-in over ~8 frames when new." */
 export const FADE_FRAMES = 8;
 
+function clamp(value: number, low: number, high: number): number {
+  // A plot shorter than the margins would invert the bounds; centre rather than flip.
+  if (high < low) return (low + high) / 2;
+  return Math.min(high, Math.max(low, value));
+}
+
 interface Placed {
   marker: MarkerInfo;
   x: number;
@@ -78,7 +84,11 @@ export function drawMarkers(ctx: Canvas2D, c: LayerContext): void {
       marker,
       x,
       y,
-      labelY: y,
+      // The scale eases toward its target rather than snapping (SPEC §7.2), so for a
+      // few frames after a fill lands outside the current range its label would be
+      // drawn past the plot — over the HUD's stats bar or the PnL block. Clamping the
+      // label (not the dot, which stays on the true price) keeps the chrome readable.
+      labelY: clamp(y, plot.y0 + unit * 1.4, plot.y1 - unit * 1.4),
       alpha,
       color: colorFor(marker, c.theme),
       label: labelFor(marker, c.layout.leverage),
@@ -90,10 +100,18 @@ export function drawMarkers(ctx: Canvas2D, c: LayerContext): void {
   // if they would overlap. The dot stays on the true price; only the label moves.
   placed.sort((a, b) => a.y - b.y);
   const minGap = unit * 2.4;
+  const labelFloor = plot.y1 - unit * 1.4;
   for (let i = 1; i < placed.length; i++) {
     const previous = placed[i - 1]!;
     const current = placed[i]!;
     if (current.labelY - previous.labelY < minGap) current.labelY = previous.labelY + minGap;
+  }
+  // Pushing down can walk the last labels off the bottom; walk back up from there.
+  for (let i = placed.length - 1; i >= 0; i--) {
+    const current = placed[i]!;
+    if (current.labelY > labelFloor) current.labelY = labelFloor;
+    const next = placed[i + 1];
+    if (next && next.labelY - current.labelY < minGap) current.labelY = next.labelY - minGap;
   }
 
   for (const p of placed) {

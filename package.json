@@ -10,6 +10,7 @@
   "scripts": {
     "capture:hl": "tsx scripts/capture-hl.ts",
     "capture:pm": "tsx scripts/capture-pm.ts",
+    "capture:binance": "tsx scripts/capture-binance.ts",
     "episodes": "tsx apps/cli/src/episodes.ts",
     "lint": "eslint .",
     "render:still": "tsx apps/cli/src/render-still.ts",
@@ -20,7 +21,8 @@
     "verify:m3": "tsx scripts/verify-m3.ts",
     "verify:m4": "tsx scripts/verify-m4.ts",
     "verify:m5": "tsx scripts/verify-m5.ts",
-    "verify:m6": "tsx scripts/verify-m6.ts"
+    "verify:m6": "tsx scripts/verify-m6.ts",
+    "verify:m7": "tsx scripts/verify-m7.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
