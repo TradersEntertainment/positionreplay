@@ -16,7 +16,7 @@ import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
 import { bold, cyan, date, dim, duration, num, red, signed, table, usd, yellow } from './format.js';
-import { createSource } from './source.js';
+import { createSource } from '@trade-replay/adapters/source';
 
 const USAGE = `
 ${bold('pnpm episodes')} <address> [options]

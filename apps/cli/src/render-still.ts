@@ -22,7 +22,7 @@ import type { PositionEpisode } from '@trade-replay/core';
 import { advanceScale, createScale, darkTheme, lightTheme, renderFrame } from '@trade-replay/renderer';
 import type { Canvas2D } from '@trade-replay/renderer';
 import { bold, cyan, dim, green, red, usd, yellow } from './format.js';
-import { createSource } from './source.js';
+import { createSource } from '@trade-replay/adapters/source';
 
 const require = createRequire(import.meta.url);
 

@@ -19,7 +19,7 @@ import { actionForDir } from '@trade-replay/adapters/hyperliquid';
 import { buildEpisodes } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
 import { bold, cyan, date, dim, green, num, red, signed, table, usd, yellow } from './format.js';
-import { createSource } from './source.js';
+import { createSource } from '@trade-replay/adapters/source';
 
 const CLOSED_PNL_TOLERANCE = 0.005; // SPEC §5: 0.5%
 
