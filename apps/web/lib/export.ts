@@ -13,7 +13,8 @@
 
 import type { Frame, PositionEpisode, PriceSeries } from '@trade-replay/core';
 import { createPlaybackClock } from '@trade-replay/core';
-import { createSequenceRenderer, darkTheme, type Canvas2D } from '@trade-replay/renderer';
+import { createSequenceRenderer, darkTheme, type Canvas2D, type Note } from '@trade-replay/renderer';
+import { createReplayAudio } from './audio';
 
 /** SPEC §9: "1080x1080 (square, best for X timeline) and 1920x1080 presets." */
 export interface ExportPreset {
@@ -56,6 +57,29 @@ export function pickVideoMimeType(isSupported?: SupportProbe): string | null {
   return VIDEO_MIME_CANDIDATES.find((candidate) => probe(candidate)) ?? null;
 }
 
+/**
+ * The same container with an audio codec added, when the browser can encode one.
+ *
+ * Returns the input unchanged when it cannot: a recorder constructed with a mime type
+ * the browser rejects throws, and a silent video is a far better outcome than a failed
+ * export. WebM carries Opus and MP4 carries AAC; nothing else is offered because
+ * nothing else is widely accepted where these clips get posted.
+ */
+export function withAudioCodec(mimeType: string, isSupported?: SupportProbe): string {
+  const probe: SupportProbe =
+    isSupported ??
+    ((candidate) =>
+      typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(candidate));
+
+  const codec = mimeType.startsWith('video/mp4') ? 'mp4a.40.2' : 'opus';
+  // A bare `video/webm` has no codecs clause to extend, so it gets one.
+  const withAudio = mimeType.includes('codecs=')
+    ? `${mimeType},${codec}`
+    : `${mimeType};codecs=${mimeType.startsWith('video/mp4') ? 'avc1' : 'vp8'},${codec}`;
+
+  return probe(withAudio) ? withAudio : mimeType;
+}
+
 /** File extension matching a recorder mime type. Never guess from the codec name. */
 export function extensionForMimeType(mimeType: string): string {
   return mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
@@ -72,6 +96,13 @@ export interface ExportScene {
   notices: string[];
   /** Carried into the export too — an unknown funding figure must not export as zero. */
   fundingUnavailable?: boolean;
+  /**
+   * The soundtrack, from `composeScore`.
+   *
+   * Optional: a GIF has no audio track and the M8 server render has no browser to make
+   * one, so the export path has to work without it.
+   */
+  score?: readonly Note[];
 }
 
 export class ExportUnsupportedError extends Error {
@@ -164,8 +195,8 @@ export async function recordVideo(
     throw new ExportUnsupportedError('This replay has no frames to record.');
   }
 
-  const mimeType = pickVideoMimeType();
-  if (!mimeType) {
+  const container = pickVideoMimeType();
+  if (!container) {
     throw new ExportUnsupportedError(
       'This browser cannot record video. Safari has no WebM encoder; try Chrome or Firefox.',
     );
@@ -178,6 +209,18 @@ export async function recordVideo(
 
   // SPEC §9: captureStream(60).
   const stream = painter.canvas.captureStream(60);
+
+  // The piano, recorded rather than played: same notes the player sounds, driven by the
+  // same frame indices, so the clip someone downloads is the one they watched. Silent
+  // locally — nobody wants eight seconds of music while waiting for a file.
+  const audio =
+    scene.score && scene.score.length > 0 ? createReplayAudio(scene.score, { silent: true }) : null;
+  const audioTrack = audio?.captureTrack() ?? null;
+  if (audioTrack) stream.addTrack(audioTrack);
+
+  // Only claim an audio codec if there is really a track to put in it; an empty audio
+  // stream in the container makes some players report a broken file.
+  const mimeType = audioTrack ? withAudioCodec(container) : container;
   const recorder = new MediaRecorder(stream, { mimeType });
   const chunks: Blob[] = [];
   recorder.addEventListener('dataavailable', (event) => {
@@ -192,6 +235,9 @@ export async function recordVideo(
   const startedAt = performance.now();
 
   painter.paint(0);
+  // The export button is the user gesture; without this the context stays suspended and
+  // every note is dropped silently.
+  await audio?.resume();
   recorder.start();
   clock.play();
 
@@ -215,6 +261,7 @@ export async function recordVideo(
       last = now;
       const index = clock.advance(delta);
       painter.paint(index);
+      audio?.advanceTo(index);
       options.onProgress?.((index + 1) / scene.frames.length);
 
       // The clock pauses itself on the final frame (SPEC §6.3).
@@ -230,6 +277,7 @@ export async function recordVideo(
   }).finally(() => {
     if (recorder.state !== 'inactive') recorder.stop();
     for (const track of stream.getTracks()) track.stop();
+    audio?.close();
   });
 
   await stopped;

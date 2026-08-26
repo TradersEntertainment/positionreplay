@@ -19,11 +19,30 @@ import {
   type PositionEpisode,
   type PriceSeries,
 } from '@trade-replay/core';
-import { createSequenceRenderer, darkTheme, type Canvas2D } from '@trade-replay/renderer';
+import {
+  composeScore,
+  computeEnergyTrack,
+  createSequenceRenderer,
+  darkTheme,
+  type Canvas2D,
+} from '@trade-replay/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { formatSignedUsd, formatUsd, shortAddress } from '@/lib/format';
+import { createReplayAudio, type ReplayAudio } from '@/lib/audio';
 
 const SPEEDS: PlaybackSpeed[] = [0.5, 1, 2, 4];
+
+/** Remembered across replays, because being asked to mute a second time is rude. */
+const MUTE_KEY = 'trade-replay:muted';
+
+function storedMuted(): boolean {
+  // Private windows and blocked site data both throw here rather than returning null.
+  try {
+    return window.localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 export interface PlayerProps {
   replayId: string;
@@ -73,6 +92,19 @@ export function Player(props: PlayerProps) {
     [episode, series, frames],
   );
   const playingRef = useRef(false);
+
+  /**
+   * The soundtrack, derived from the same energy track the chart's effects use — so the
+   * flash, the meter and the note are three readings of one number, not three things
+   * that happen to coincide. Pure and precomputed, for the same reason the frames are.
+   */
+  const score = useMemo(
+    () => composeScore(frames, computeEnergyTrack(frames), episode),
+    [frames, episode],
+  );
+
+  const audioRef = useRef<ReplayAudio | null>(null);
+  const [muted, setMuted] = useState(false);
 
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
@@ -153,6 +185,22 @@ export function Player(props: PlayerProps) {
     };
   }, [draw, clock, renderer]);
 
+  // The audio graph is built once per score and torn down with the component. It is not
+  // started here: browsers refuse to run an AudioContext that was not begun by a user
+  // gesture, so `resume()` is called from the play button instead.
+  useEffect(() => {
+    const audio = createReplayAudio(score);
+    audioRef.current = audio;
+    const initial = storedMuted();
+    setMuted(initial);
+    audio?.setMuted(initial);
+    audio?.seek(clock.state.frameIndex);
+    return () => {
+      audio?.close();
+      audioRef.current = null;
+    };
+  }, [score, clock]);
+
   useEffect(() => {
     resize();
     const observer = new ResizeObserver(resize);
@@ -173,6 +221,9 @@ export function Player(props: PlayerProps) {
       const before = clock.state.frameIndex;
       const index = clock.advance(delta);
       if (index !== before || renderer.lastIndex !== index) draw(index);
+      // Driven by the frame index, not by elapsed time, so the melody stays locked to
+      // the chart at every speed and through a scrub.
+      audioRef.current?.advanceTo(index);
 
       // Playback stops itself at the final frame; reflect that in the button without
       // touching React state on every tick.
@@ -197,12 +248,28 @@ export function Player(props: PlayerProps) {
     clock.toggle();
     syncPlaying();
     draw(clock.state.frameIndex);
+    // The gesture browsers require. Pressing play is the moment sound is expected, and
+    // no other control in this player is one a user would be surprised to hear.
+    if (clock.state.playing) void audioRef.current?.resume();
   }, [clock, syncPlaying, draw]);
+
+  const toggleMute = useCallback(() => {
+    const next = !muted;
+    setMuted(next);
+    audioRef.current?.setMuted(next);
+    try {
+      window.localStorage.setItem(MUTE_KEY, next ? '1' : '0');
+    } catch {
+      // A browser that refuses to store the preference still honours it for this
+      // session; failing the click over it would be worse.
+    }
+  }, [muted]);
 
   const seekTo = useCallback(
     (index: number) => {
       clock.seek(index);
       draw(clock.state.frameIndex);
+      audioRef.current?.seek(clock.state.frameIndex);
     },
     [clock, draw],
   );
@@ -212,6 +279,7 @@ export function Player(props: PlayerProps) {
       clock.step(delta);
       syncPlaying();
       draw(clock.state.frameIndex);
+      audioRef.current?.seek(clock.state.frameIndex);
     },
     [clock, syncPlaying, draw],
   );
@@ -321,6 +389,17 @@ export function Player(props: PlayerProps) {
           className="w-24 border border-tr-line bg-tr-panel px-3 py-1.5 hover:border-tr-up"
         >
           {playing ? 'Pause' : 'Play'}
+        </button>
+
+        <button
+          type="button"
+          onClick={toggleMute}
+          data-testid="mute-toggle"
+          aria-pressed={muted}
+          title={muted ? 'Sound off' : 'Sound on — a piano line that follows the PnL'}
+          className="border border-tr-line bg-tr-panel px-3 py-1.5 hover:border-tr-up"
+        >
+          {muted ? 'Sound off' : 'Sound on'}
         </button>
 
         <span ref={readoutRef} data-testid="frame-readout" className="w-52 text-tr-dim">

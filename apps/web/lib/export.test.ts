@@ -8,6 +8,7 @@ import {
   extensionForMimeType,
   formatBytes,
   pickVideoMimeType,
+  withAudioCodec,
   planGif,
   type ExportScene,
 } from './export';
@@ -33,6 +34,38 @@ describe('pickVideoMimeType', () => {
     // Chromium claims support for it while rejecting video/mp4;codecs=avc1, so it is
     // the least trustworthy claim in the list.
     expect(VIDEO_MIME_CANDIDATES.at(-1)).toBe('video/mp4');
+  });
+});
+
+describe('withAudioCodec', () => {
+  it('adds opus to a webm codecs clause', () => {
+    expect(withAudioCodec('video/webm;codecs=vp9', () => true)).toBe('video/webm;codecs=vp9,opus');
+  });
+
+  it('gives a bare container a codecs clause rather than a stray comma', () => {
+    // `video/webm,opus` is not a mime type, and MediaRecorder throws on one.
+    expect(withAudioCodec('video/webm', () => true)).toBe('video/webm;codecs=vp8,opus');
+  });
+
+  it('uses AAC for mp4, because Opus in mp4 is not what players expect', () => {
+    expect(withAudioCodec('video/mp4;codecs=avc1', () => true)).toBe(
+      'video/mp4;codecs=avc1,mp4a.40.2',
+    );
+  });
+
+  it('falls back to the silent container when the browser cannot encode audio', () => {
+    // Constructing a MediaRecorder with an unsupported type throws, and a failed export
+    // is far worse than a video with no sound.
+    expect(withAudioCodec('video/webm;codecs=vp9', () => false)).toBe('video/webm;codecs=vp9');
+  });
+
+  it('asks about the exact string it intends to use', () => {
+    const asked: string[] = [];
+    withAudioCodec('video/webm;codecs=vp9', (candidate) => {
+      asked.push(candidate);
+      return true;
+    });
+    expect(asked).toEqual(['video/webm;codecs=vp9,opus']);
   });
 });
 

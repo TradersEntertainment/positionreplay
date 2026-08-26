@@ -10,6 +10,7 @@
  */
 
 import { buildFrames } from '@trade-replay/core';
+import { composeScore, computeEnergyTrack } from '@trade-replay/renderer';
 import type { PositionEpisode, PriceSeries } from '@trade-replay/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -54,18 +55,22 @@ export function ExportPanel(props: ExportPanelProps) {
 
   // Built here rather than passed from the server: Frame[] is large, and buildFrames is
   // pure and cheap enough that shipping it would only inflate the page payload.
-  const scene: ExportScene = useMemo(
-    () => ({
+  const scene: ExportScene = useMemo(() => {
+    const frames = buildFrames(episode, series);
+    return {
       episode,
       series,
-      frames: buildFrames(episode, series),
+      frames,
       address,
       interval,
       notices,
+      // The same score the player sounds, recomposed from the same frames rather than
+      // handed across from the Player component — two components sharing one mutable
+      // audio object is how a paused player ends up playing over an export.
+      score: composeScore(frames, computeEnergyTrack(frames), episode),
       ...(fundingUnavailable ? { fundingUnavailable: true } : {}),
-    }),
-    [episode, series, address, interval, notices, fundingUnavailable],
-  );
+    };
+  }, [episode, series, address, interval, notices, fundingUnavailable]);
 
   const [preset, setPreset] = useState<ExportPreset>(EXPORT_PRESETS[0]!);
   const [job, setJob] = useState<Job>(null);

@@ -36,14 +36,19 @@ export default async function Home({
 
   return (
     <main className="mx-auto max-w-4xl p-8">
-      <h1 className="text-2xl font-bold">trade-replay</h1>
+      <h1 className="text-2xl font-bold">Replay a trader&apos;s position</h1>
       <p className="mt-1 text-sm text-tr-dim">
-        Replay a trader&apos;s position from open to close.
+        From open to close, as a chart that plays. Paste an address, or upload your own
+        fills.
       </p>
 
       <form method="GET" className="mt-6 flex gap-2">
         <select
           name="venue"
+          // Remounted when the choice changes. React ignores a new `defaultValue` on an
+          // input that is already mounted, so arriving here from a header chip by
+          // client-side navigation left the select showing the previous venue.
+          key={chosen}
           defaultValue={chosen}
           aria-label="Venue"
           data-testid="venue-select"
