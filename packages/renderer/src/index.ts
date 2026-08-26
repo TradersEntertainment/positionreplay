@@ -9,4 +9,5 @@ export * from './types.js';
 export * from './theme.js';
 export * from './scale.js';
 export * from './render.js';
+export * from './sequence.js';
 export { FADE_FRAMES } from './layers/markers.js';

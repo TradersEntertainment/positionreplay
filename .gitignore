@@ -22,3 +22,6 @@ out/
 *.log
 .DS_Store
 .data/
+
+# Copied from node_modules at build time by apps/web/scripts/copy-gif-worker.mjs
+apps/web/public/gif.worker.js

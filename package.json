@@ -8,16 +8,17 @@
     "node": ">=22"
   },
   "scripts": {
+    "capture:hl": "tsx scripts/capture-hl.ts",
+    "episodes": "tsx apps/cli/src/episodes.ts",
+    "lint": "eslint .",
+    "render:still": "tsx apps/cli/src/render-still.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "turbo typecheck && tsc --noEmit -p tsconfig.scripts.json",
-    "lint": "eslint .",
-    "episodes": "tsx apps/cli/src/episodes.ts",
-    "render:still": "tsx apps/cli/src/render-still.ts",
     "verify:m1": "tsx apps/cli/src/verify-m1.ts",
-    "capture:hl": "tsx scripts/capture-hl.ts",
     "verify:m3": "tsx scripts/verify-m3.ts",
-    "verify:m4": "tsx scripts/verify-m4.ts"
+    "verify:m4": "tsx scripts/verify-m4.ts",
+    "verify:m5": "tsx scripts/verify-m5.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

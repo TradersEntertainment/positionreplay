@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
     "build": "next build",
+    "dev": "next dev",
+    "prebuild": "node scripts/copy-gif-worker.mjs",
+    "predev": "node scripts/copy-gif-worker.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
@@ -16,6 +18,7 @@
     "@trade-replay/core": "workspace:*",
     "@trade-replay/renderer": "workspace:*",
     "better-sqlite3": "^12.4.1",
+    "gif.js": "^0.2.0",
     "next": "^15.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

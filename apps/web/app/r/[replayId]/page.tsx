@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ExportPanel } from '@/components/ExportPanel';
 import { Player } from '@/components/Player';
 import { Notices } from '@/components/Notices';
 import { ReplayNotFoundError, loadReplay } from '@/lib/data';
@@ -71,7 +72,17 @@ export default async function ReplayPage({
           availableIntervals={replay.availableIntervals}
           notices={replay.notices}
         />
+
+        <ExportPanel
+          episode={replay.episode}
+          series={replay.series}
+          address={replay.address}
+          interval={replay.interval}
+          notices={replay.notices}
+          shareUrl={`/r/${replay.replayId}`}
+        />
       </div>
     </main>
   );
 }
+

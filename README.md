@@ -12,7 +12,8 @@ Replay any trader's position from open to close as an animated, time-lapse chart
 | **M2** renderer + one-frame PNG | Complete |
 | **M3** interactive player | Complete — 15/15 browser checks pass |
 | **M4** episode browser + caching | Complete — 12/12 browser checks pass |
-| M5–M8 | Not started |
+| **M5** client-side export | Complete — 11/11 browser checks pass |
+| M6–M8 | Not started |
 
 M1 is deliberately *not* marked done. SPEC §12 defines it as done when the numbers
 match Hyperliquid's own UI, and the environment this was built in blocks every venue
@@ -50,7 +51,12 @@ pnpm --filter @trade-replay/web build
 cd apps/web && TRADE_REPLAY_FIXTURE=synthetic npx next start -p 3100 &
 pnpm verify:m3
 pnpm verify:m4
+pnpm verify:m5
 ```
+
+`verify:m5` downloads the real WebM and GIF and inspects their bytes — the EBML magic,
+the GIF header's width field, and the animation-frame count. A button that appears to
+work and a file that actually plays are different claims.
 
 Every command that hits the venue also accepts `--fixture`, which replays a recording
 through the real adapter. Only the socket is swapped; the reconstruction being

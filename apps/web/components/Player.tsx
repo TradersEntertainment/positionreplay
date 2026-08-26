@@ -19,14 +19,7 @@ import {
   type PositionEpisode,
   type PriceSeries,
 } from '@trade-replay/core';
-import {
-  advanceScale,
-  createScale,
-  darkTheme,
-  renderFrame,
-  type Canvas2D,
-  type ScaleState,
-} from '@trade-replay/renderer';
+import { createSequenceRenderer, darkTheme, type Canvas2D } from '@trade-replay/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { formatSignedUsd, formatUsd, shortAddress } from '@/lib/format';
 
@@ -67,23 +60,22 @@ export function Player(props: PlayerProps) {
   clockRef.current ??= createPlaybackClock({ frameCount: frames.length });
   const clock = clockRef.current;
 
-  const scaleRef = useRef<ScaleState>(createScale());
-  /** Last frame actually drawn, so the eased scale can be stepped to match. */
-  const drawnRef = useRef(-1);
+  /**
+   * Owns the eased scale and the last-drawn index.
+   *
+   * Shared with the export path so a downloaded frame and the on-screen one are framed
+   * identically — SPEC §9 calls that the whole payoff of §7's purity rule.
+   */
+  const renderer = useMemo(
+    () => createSequenceRenderer(episode, series, frames, darkTheme),
+    [episode, series, frames],
+  );
   const playingRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [climax, setClimax] = useState(false);
 
-  /**
-   * Draw a frame, stepping the eased scale to it.
-   *
-   * SPEC §7.2's scale at frame N depends on every frame before it, so a jumped-to
-   * frame must replay that easing or it is framed differently from the same frame
-   * reached by playing. Stepping through the intermediates — and restarting on a
-   * backwards jump — makes seek and playback agree exactly.
-   */
   const draw = useCallback(
     (index: number) => {
       const canvas = canvasRef.current;
@@ -93,18 +85,7 @@ export function Player(props: PlayerProps) {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      let from = drawnRef.current;
-      if (index < from) {
-        scaleRef.current = createScale();
-        from = -1;
-      }
-      for (let i = from + 1; i < index; i++) {
-        const skipped = frames[i];
-        if (skipped) advanceScale(scaleRef.current, series, skipped);
-      }
-      drawnRef.current = index;
-
-      renderFrame(ctx as unknown as Canvas2D, frame, episode, series, scaleRef.current, darkTheme, {
+      renderer.render(ctx as unknown as Canvas2D, index, {
         width: canvas.width,
         height: canvas.height,
         // The backing store is already sized in device pixels, so geometry derived
@@ -123,7 +104,7 @@ export function Player(props: PlayerProps) {
         scrubRef.current.value = String(index);
       }
     },
-    [frames, episode, series, interval, notices, props.address],
+    [frames, renderer, interval, notices, props.address],
   );
 
   /** Match the backing store to the element's real size, in device pixels. */
@@ -139,18 +120,16 @@ export function Player(props: PlayerProps) {
     canvas.width = width;
     canvas.height = height;
     // Geometry changed, so the eased scale has to be replayed from scratch.
-    scaleRef.current = createScale();
-    drawnRef.current = -1;
+    renderer.reset();
     draw(clock.state.frameIndex);
-  }, [draw, clock]);
+  }, [draw, clock, renderer]);
 
   // A new series means a new timeline: adopt the frame count and redraw from scratch.
   useEffect(() => {
     clock.setFrameCount(frames.length);
-    scaleRef.current = createScale();
-    drawnRef.current = -1;
+    renderer.reset();
     draw(clock.state.frameIndex);
-  }, [frames, clock, draw]);
+  }, [frames, clock, draw, renderer]);
 
   // Fonts are the host's job (SPEC §7); the renderer only names them. Waiting avoids a
   // first paint measured against a fallback face, which shifts every label.
@@ -162,15 +141,14 @@ export function Player(props: PlayerProps) {
 
     void ready.catch(() => undefined).then(() => {
       if (cancelled) return;
-      scaleRef.current = createScale();
-      drawnRef.current = -1;
+      renderer.reset();
       draw(clock.state.frameIndex);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [draw, clock]);
+  }, [draw, clock, renderer]);
 
   useEffect(() => {
     resize();
@@ -191,7 +169,7 @@ export function Player(props: PlayerProps) {
 
       const before = clock.state.frameIndex;
       const index = clock.advance(delta);
-      if (index !== before || drawnRef.current !== index) draw(index);
+      if (index !== before || renderer.lastIndex !== index) draw(index);
 
       // Playback stops itself at the final frame; reflect that in the button without
       // touching React state on every tick.
@@ -205,7 +183,7 @@ export function Player(props: PlayerProps) {
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [clock, draw]);
+  }, [clock, draw, renderer]);
 
   const syncPlaying = useCallback(() => {
     playingRef.current = clock.state.playing;
