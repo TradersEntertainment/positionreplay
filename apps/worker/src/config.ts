@@ -100,10 +100,23 @@ export function loadConfig(): WorkerConfig {
   if (config.transport === 'http') {
     requireRealValue('WEB_URL', config.webUrl);
     if (config.workerToken !== undefined) requireRealValue('RENDER_WORKER_TOKEN', config.workerToken);
+    // A bare host is the mistake people actually make, because that is the form the
+    // platform displays a private domain in. Saying "not a URL" and stopping leaves
+    // them to guess which half is missing.
     try {
-      new URL(config.webUrl);
+      const parsed = new URL(config.webUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('not http');
+      }
     } catch {
-      throw new Error(`WEB_URL is not a URL: "${config.webUrl}".`);
+      const guess = `http://${config.webUrl.replace(/^\/*/, '')}${
+        /:\d+$/.test(config.webUrl) ? '' : ':8080'
+      }`;
+      throw new Error(
+        `WEB_URL needs a scheme and a port: "${config.webUrl}". Try "${guess}".\n` +
+          `  A private domain is displayed as a bare host, but this is a URL — on Railway ` +
+          `the port is the one the web service listens on.`,
+      );
     }
   }
 

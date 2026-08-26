@@ -133,13 +133,16 @@ that directory, and says so in a comment.
 ```
 RENDER_TRANSPORT=http
 RENDER_WORKER_TOKEN=paste-the-same-value-web-has
-WEB_URL=http://web.railway.internal:8080
+WEB_URL=http://<web-private-domain>.railway.internal:8080
 NODE_ENV=production
 ```
 
 **Both of those are examples — substitute real values.** `WEB_URL` takes the web
-service's private domain, which Railway shows under its Networking settings, and the
-token is whatever you generated for `web`. The worker refuses to start on a value that
+service's private domain, which Railway shows under its Networking settings, **plus a
+scheme and the port**: Railway displays a private domain as a bare host
+(`trade-replayweb.railway.internal`) and this field is a URL, so
+`http://trade-replayweb.railway.internal:8080` is the shape. The port is the one the
+web service listens on — the same one shown next to its public domain. The worker refuses to start on a value that
 still looks like a placeholder, because pasting one through surfaces much later as
 `Cannot convert argument to a ByteString ...`, which is the truth (HTTP headers are
 ASCII, and Turkish `ğ` is not) and no help at all.
