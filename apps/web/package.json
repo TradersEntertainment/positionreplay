@@ -8,7 +8,7 @@
     "build": "next build && node scripts/finalize-standalone.mjs",
     "predev": "node scripts/copy-gif-worker.mjs",
     "dev": "next dev",
-    "start": "node .next/standalone/apps/web/server.js",
+    "start": "node scripts/start-standalone.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
