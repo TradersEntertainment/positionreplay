@@ -7,10 +7,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trade-replay/adapters": "workspace:*",
-    "@trade-replay/core": "workspace:*",
-    "@trade-replay/renderer": "workspace:*",
+    "@fontsource/jetbrains-mono": "^5.2.6",
     "@napi-rs/canvas": "^0.1.85",
-    "@fontsource/jetbrains-mono": "^5.2.6"
+    "@trade-replay/adapters": "workspace:*",
+    "@trade-replay/cache": "workspace:*",
+    "@trade-replay/core": "workspace:*",
+    "@trade-replay/renderer": "workspace:*"
   }
 }

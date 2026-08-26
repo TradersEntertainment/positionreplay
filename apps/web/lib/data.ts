@@ -11,7 +11,9 @@
 
 import { hyperliquidAdapter } from '@trade-replay/adapters';
 import type { AdapterWarning } from '@trade-replay/adapters';
-import { createSource, fixtureFromEnv } from '@trade-replay/adapters/source';
+import { createSource, fixtureFromEnv, findWorkspaceRoot } from '@trade-replay/adapters/source';
+import type { SourceCache } from '@trade-replay/adapters/source';
+import { cacheUrlFor, createCandleCache, createFillCache, openCache } from '@trade-replay/cache';
 import {
   HL_INTERVALS,
   buildEpisodes,
@@ -22,6 +24,42 @@ import {
   seriesRangeFor,
 } from '@trade-replay/core';
 import type { PositionEpisode, PriceSeries } from '@trade-replay/core';
+
+/**
+ * One SQLite connection for the whole process, opened lazily.
+ *
+ * A connection per request would leak a file handle per request. SPEC §15 already
+ * requires this process to be the single writer (replica count 1 while SQLite is the
+ * store), so one shared connection is also the only correct shape.
+ *
+ * A cache is an optimisation: if it cannot be opened, requests still work uncached.
+ */
+let sharedCache: SourceCache | null | undefined;
+
+function cache(): SourceCache | undefined {
+  if (sharedCache === undefined) {
+    try {
+      const handle = openCache({
+        url: cacheUrlFor(fixtureFromEnv()),
+        cwd: findWorkspaceRoot(),
+      });
+      sharedCache = {
+        candleCache: createCandleCache(handle.db),
+        fillCache: createFillCache(handle.db),
+        // The connection outlives any single request, so a request must not close it.
+        close: () => undefined,
+      };
+    } catch {
+      sharedCache = null;
+    }
+  }
+  return sharedCache ?? undefined;
+}
+
+/** True when the database is reachable — the /api/health probe (SPEC §15.1). */
+export function cacheAvailable(): boolean {
+  return cache() !== undefined;
+}
 
 export interface EpisodeSummary {
   replayId: string;
@@ -79,7 +117,7 @@ function stripRaw(episode: PositionEpisode): PositionEpisode {
 }
 
 async function loadAll(address: string) {
-  const source = createSource(fixtureFromEnv());
+  const source = createSource(fixtureFromEnv(), { cache: cache() });
   const input = await hyperliquidAdapter.parseInput(address, source.ctx);
 
   const fills = await hyperliquidAdapter.fetchFills(input, undefined, source.ctx);

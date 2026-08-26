@@ -5,13 +5,23 @@
  * order, and no key or seed phrase is ever requested (CLAUDE.md, hard rules).
  */
 
+import { HL_INTERVALS } from '@trade-replay/core';
 import type { Fill, FundingEvent, PriceSeries, TimeRange } from '@trade-replay/core';
+import { withCandleCache, withFillCache } from '../cacheHelpers.js';
 import { HL_WEIGHTS } from '../limiter.js';
-import type { Adapter, AdapterContext, AdapterInput, AdapterWarning, SeriesRequest } from '../types.js';
+import type {
+  Adapter,
+  AdapterContext,
+  AdapterInput,
+  AdapterWarning,
+  CachedCandle,
+  RawFillRecord,
+  SeriesRequest,
+} from '../types.js';
 import { InvalidInputError, SeriesUnavailableError } from '../types.js';
 import { createHlClient } from './client.js';
 import { coinForInstrument, mapCandles, mapFill, mapFunding } from './map.js';
-import { HlCandlesSchema, HlFillsSchema, HlFundingListSchema } from './schemas.js';
+import { HlCandlesSchema, HlFillSchema, HlFillsSchema, HlFundingListSchema, parseVenue } from './schemas.js';
 
 export { HL_API_BASE } from './client.js';
 // Pure replay helper; the Node-only fixture loader lives behind ./hyperliquid/fixtures.
@@ -71,24 +81,20 @@ async function parseInput(raw: string, ctx?: AdapterContext): Promise<AdapterInp
 }
 
 /**
- * All fills in `range`, paginated. SPEC §4.3.
+ * One contiguous span of fills, paginated. SPEC §4.3.
  *
  * `aggregateByTime: true` merges the partial fills of a single crossing order, which
  * makes the replay's markers far cleaner.
  */
-async function fetchFills(
+async function fetchFillSpan(
   input: AdapterInput,
-  range?: TimeRange,
-  ctx?: AdapterContext,
-): Promise<Fill[]> {
+  span: TimeRange,
+  ctx: AdapterContext | undefined,
+): Promise<RawFillRecord[]> {
   const client = createHlClient(ctx);
-  const now = ctx?.now ?? Date.now;
-  const from = range?.from ?? 0;
-  const to = range?.to ?? now();
-
   const seen = new Set<number>();
   const raws = [];
-  let startTime = from;
+  let startTime = span.from;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const batch = await client.info(
@@ -96,7 +102,7 @@ async function fetchFills(
         type: 'userFillsByTime',
         user: input.address,
         startTime,
-        endTime: to,
+        endTime: span.to,
         aggregateByTime: true,
       },
       HlFillsSchema,
@@ -133,7 +139,7 @@ async function fetchFills(
     }
 
     const next = maxTime + 1;
-    if (next <= startTime || next > to) break;
+    if (next <= startTime || next > span.to) break;
     startTime = next;
   }
 
@@ -148,24 +154,51 @@ async function fetchFills(
         `Fill history unavailable before ${new Date(oldest).toISOString()} — Hyperliquid API limit ` +
         `(~${HL_FILL_HISTORY_LIMIT} most recent fills). Positions opened earlier will have an ` +
         `incorrect average entry.`,
-      detail: { oldestAvailable: oldest, fillCount: raws.length, requestedFrom: from },
+      detail: { oldestAvailable: oldest, fillCount: raws.length, requestedFrom: span.from },
     });
   }
 
-  return raws.map((raw) => mapFill(raw, ctx?.onWarning));
+  return raws.map((raw) => ({ id: `hl:${raw.tid}`, ts: raw.time, payload: raw }));
 }
 
-/** Candles covering [from, to]. SPEC §4.3. */
-async function fetchSeries(req: SeriesRequest, ctx?: AdapterContext): Promise<PriceSeries> {
-  const client = createHlClient(ctx);
-  const coin = coinForInstrument(req.instrument);
+/** All fills for this account, served through the cache when one is supplied. */
+async function fetchFills(
+  input: AdapterInput,
+  range?: TimeRange,
+  ctx?: AdapterContext,
+): Promise<Fill[]> {
+  const now = ctx?.now ?? Date.now;
+  const window: TimeRange = { from: range?.from ?? 0, to: range?.to ?? now() };
 
+  const records = await withFillCache({
+    cache: ctx?.fillCache,
+    venue: 'hyperliquid',
+    address: input.address,
+    range: window,
+    fetchSpan: (span) => fetchFillSpan(input, span, ctx),
+  });
+
+  // Cached payloads go back through Zod on the way out. A cache written by an older
+  // build is just as untrusted as a venue response (SPEC §14).
+  return records.map((record) =>
+    mapFill(parseVenue(HlFillSchema, record.payload, 'cached fill'), ctx?.onWarning),
+  );
+}
+
+/** One contiguous span of candles, paginated. SPEC §4.3. */
+async function fetchCandleSpan(
+  coin: string,
+  interval: string,
+  span: TimeRange,
+  ctx: AdapterContext | undefined,
+): Promise<CachedCandle[]> {
+  const client = createHlClient(ctx);
   const all = [];
-  let startTime = req.from;
+  let startTime = span.from;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const batch = await client.info(
-      { type: 'candleSnapshot', req: { coin, interval: req.interval, startTime, endTime: req.to } },
+      { type: 'candleSnapshot', req: { coin, interval, startTime, endTime: span.to } },
       HlCandlesSchema,
       'candleSnapshot',
       HL_WEIGHTS.optimisticCandlePage,
@@ -178,17 +211,39 @@ async function fetchSeries(req: SeriesRequest, ctx?: AdapterContext): Promise<Pr
 
     const maxTime = batch.reduce((max, c) => Math.max(max, c.t), startTime);
     const next = maxTime + 1;
-    if (next <= startTime || next > req.to) break;
+    if (next <= startTime || next > span.to) break;
     startTime = next;
   }
 
+  return all.map((c) => ({ t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v }));
+}
+
+/** Candles covering [from, to], served through the cache when one is supplied. */
+async function fetchSeries(req: SeriesRequest, ctx?: AdapterContext): Promise<PriceSeries> {
+  const coin = coinForInstrument(req.instrument);
+  const spec = HL_INTERVALS.find((i) => i.name === req.interval);
+  if (!spec) {
+    throw new Error(
+      `Unknown Hyperliquid interval "${req.interval}". Available: ${HL_INTERVALS.map((i) => i.name).join(', ')}`,
+    );
+  }
+
+  const bars = await withCandleCache({
+    cache: ctx?.candleCache,
+    key: { venue: 'hyperliquid', instrument: req.instrument, interval: req.interval },
+    range: { from: req.from, to: req.to },
+    intervalMs: spec.ms,
+    now: (ctx?.now ?? Date.now)(),
+    fetchSpan: (span) => fetchCandleSpan(coin, req.interval, span, ctx),
+  });
+
   // SPEC §11 case 8: a delisted or HIP-3 market with no candles must be a clear
   // error, never a blank canvas.
-  if (all.length === 0) {
+  if (bars.length === 0) {
     throw new SeriesUnavailableError(req.instrument, req.interval, { from: req.from, to: req.to });
   }
 
-  return mapCandles(req.instrument, req.interval, all);
+  return mapCandles(req.instrument, req.interval, bars);
 }
 
 /** Funding payments inside the window. SPEC §4.3, same 2000-item pagination. */

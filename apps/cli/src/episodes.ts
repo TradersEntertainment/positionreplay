@@ -16,7 +16,7 @@ import { HttpError, VenueUnreachableError } from '@trade-replay/adapters';
 import { buildEpisodes } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
 import { bold, cyan, date, dim, duration, num, red, signed, table, usd, yellow } from './format.js';
-import { createSource } from '@trade-replay/adapters/source';
+import { createCachedSource } from '@trade-replay/cache';
 
 const USAGE = `
 ${bold('pnpm episodes')} <address> [options]
@@ -113,7 +113,7 @@ async function main(): Promise<number> {
   }
   const { options } = parsed;
 
-  const source = createSource(options.fixture);
+  const source = createCachedSource(options.fixture);
   const input = await hyperliquidAdapter.parseInput(options.address, source.ctx);
 
   if (!options.json) {

@@ -22,7 +22,7 @@ import type { PositionEpisode } from '@trade-replay/core';
 import { advanceScale, createScale, darkTheme, lightTheme, renderFrame } from '@trade-replay/renderer';
 import type { Canvas2D } from '@trade-replay/renderer';
 import { bold, cyan, dim, green, red, usd, yellow } from './format.js';
-import { createSource } from '@trade-replay/adapters/source';
+import { createCachedSource } from '@trade-replay/cache';
 
 const require = createRequire(import.meta.url);
 
@@ -116,7 +116,7 @@ pnpm render:still <address> [options]
     return values.help ? 0 : 1;
   }
 
-  const source = createSource(values.fixture === '' ? 'synthetic' : values.fixture);
+  const source = createCachedSource(values.fixture === '' ? 'synthetic' : values.fixture);
   const input = await hyperliquidAdapter.parseInput(positionals[0]!, source.ctx);
 
   console.log(`${dim('source  ')} ${source.label}`);

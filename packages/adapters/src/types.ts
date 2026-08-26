@@ -63,6 +63,90 @@ export interface HttpRequest {
 
 export type FetchLike = (url: string, init: HttpRequest) => Promise<HttpResponse>;
 
+/** One bar, as stored. SPEC §10 keys candles by (venue, instrument, interval, bucketStart). */
+export interface CachedCandle {
+  /** Bucket open time. */
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export interface CandleKey {
+  venue: VenueId;
+  instrument: string;
+  interval: string;
+}
+
+/**
+ * What the cache needs to reason about time.
+ *
+ * `intervalMs` is passed in rather than resolved from the interval name, because
+ * interval vocabularies are venue-specific and the cache must not learn them.
+ */
+export interface CandleCacheContext {
+  intervalMs: number;
+  now: number;
+}
+
+/**
+ * SPEC §10: "candles ... immutable once the bar closes. Cache forever. Only the most
+ * recent (still-open) bar is volatile."
+ *
+ * `missing` exists because rows alone cannot answer "have we asked?". A venue
+ * legitimately returns nothing for a quiet span, and a row-only cache then refetches
+ * that span on every single load, forever. Coverage is tracked separately.
+ */
+export interface CandleCache {
+  /** Closed bars known for this window. Never includes the still-forming bar. */
+  read(key: CandleKey, range: TimeRange, ctx: CandleCacheContext): Promise<CachedCandle[]>;
+  /** Sub-ranges of `range` never fetched, plus any still-volatile tail. */
+  missing(key: CandleKey, range: TimeRange, ctx: CandleCacheContext): Promise<TimeRange[]>;
+  /** Store bars and mark `range` fetched. Still-forming bars are dropped. */
+  write(
+    key: CandleKey,
+    bars: readonly CachedCandle[],
+    range: TimeRange,
+    ctx: CandleCacheContext,
+  ): Promise<void>;
+}
+
+/**
+ * A venue fill kept verbatim.
+ *
+ * SPEC §4.3 caps Hyperliquid history at roughly the most recent 10,000 fills, so this
+ * is data that cannot simply be refetched once it ages out. It is stored as the raw
+ * payload rather than as a parsed `Fill`: the venue contract has not been checked
+ * against a live response yet (docs/VERIFYING-M1.md), and keeping the original means a
+ * corrected schema can re-derive everything from cache instead of from the network.
+ */
+export interface RawFillRecord {
+  /** Venue-unique dedupe key, the same one `Fill.id` carries. */
+  id: string;
+  ts: number;
+  payload: unknown;
+}
+
+export interface FillSyncState {
+  /** Earliest timestamp the cache has actually synced from. */
+  syncedFromTs: number;
+  /** SPEC §10: "on refetch only request startTime = lastSyncedTs". */
+  lastSyncedTs: number;
+}
+
+export interface FillCache {
+  readState(venue: VenueId, address: string): Promise<FillSyncState | null>;
+  read(venue: VenueId, address: string, range: TimeRange): Promise<RawFillRecord[]>;
+  write(
+    venue: VenueId,
+    address: string,
+    records: readonly RawFillRecord[],
+    state: FillSyncState,
+  ): Promise<void>;
+}
+
 export interface RateLimiter {
   /** Resolves once `weight` units are available. */
   take(weight: number): Promise<void>;
@@ -85,6 +169,9 @@ export interface AdapterContext {
   sleep?: (ms: number) => Promise<void>;
   /** SPEC §4.5: supplied from M4 onward; absent means ENS input is rejected, not guessed. */
   resolveEns?: (name: string) => Promise<string | null>;
+  /** SPEC §10. Absent means every call goes to the venue. */
+  candleCache?: CandleCache;
+  fillCache?: FillCache;
 }
 
 export interface Adapter {

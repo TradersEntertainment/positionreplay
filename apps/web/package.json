@@ -10,13 +10,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.6",
     "@trade-replay/adapters": "workspace:*",
+    "@trade-replay/cache": "workspace:*",
     "@trade-replay/core": "workspace:*",
     "@trade-replay/renderer": "workspace:*",
     "next": "^15.5.4",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "@fontsource/jetbrains-mono": "^5.2.6"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.14",

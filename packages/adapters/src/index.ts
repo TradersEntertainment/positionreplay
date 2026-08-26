@@ -8,4 +8,5 @@
 export * from './types.js';
 export * from './limiter.js';
 export * from './withRetry.js';
+export * from './cacheHelpers.js';
 export { hyperliquidAdapter } from './hyperliquid/index.js';

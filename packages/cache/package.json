@@ -1,0 +1,23 @@
+{
+  "name": "@trade-replay/cache",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@trade-replay/adapters": "workspace:*",
+    "@trade-replay/core": "workspace:*",
+    "better-sqlite3": "^12.4.1",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "drizzle-kit": "^0.31.5"
+  }
+}

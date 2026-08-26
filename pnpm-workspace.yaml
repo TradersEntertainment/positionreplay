@@ -6,3 +6,6 @@ packages:
 # tsx and vitest are unusable without it.
 onlyBuiltDependencies:
   - esbuild
+  # Native module. Its prebuilt binaries live on github.com, which some networks
+  # block; the install script falls back to building from source.
+  - better-sqlite3

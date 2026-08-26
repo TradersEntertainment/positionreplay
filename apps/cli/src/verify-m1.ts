@@ -19,7 +19,7 @@ import { actionForDir } from '@trade-replay/adapters/hyperliquid';
 import { buildEpisodes } from '@trade-replay/core';
 import type { PositionEpisode } from '@trade-replay/core';
 import { bold, cyan, date, dim, green, num, red, signed, table, usd, yellow } from './format.js';
-import { createSource } from '@trade-replay/adapters/source';
+import { createCachedSource } from '@trade-replay/cache';
 
 const CLOSED_PNL_TOLERANCE = 0.005; // SPEC §5: 0.5%
 
@@ -140,7 +140,7 @@ pnpm verify:m1 <address> [--fixture <name>]
     return values.help ? 0 : 1;
   }
 
-  const source = createSource(values.fixture === '' ? 'synthetic' : values.fixture);
+  const source = createCachedSource(values.fixture === '' ? 'synthetic' : values.fixture);
   const input = await hyperliquidAdapter.parseInput(positionals[0]!, source.ctx);
 
   console.log(bold('M1 verification'));
