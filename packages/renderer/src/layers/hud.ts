@@ -26,6 +26,16 @@ import {
 import type { Canvas2D } from '../types.js';
 import type { LayerContext } from './context.js';
 
+/**
+ * Green means gained, red means lost, and exactly zero means neither.
+ * `>= 0` would paint a flat $0.00 the same green as a profit.
+ */
+function pnlColor(value: number, theme: LayerContext['theme']): string {
+  if (value > 0) return theme.pnlUp;
+  if (value < 0) return theme.pnlDown;
+  return theme.hudText;
+}
+
 export function drawHud(ctx: Canvas2D, c: LayerContext): void {
   drawIdentity(ctx, c);
   drawTotalPnl(ctx, c);
@@ -95,7 +105,7 @@ function drawTotalPnl(ctx: Canvas2D, c: LayerContext): void {
   });
 
   text(ctx, signedUsd(frame.totalPnl), x, hud.top + hud.lineHeight * 0.75, {
-    color: frame.totalPnl >= 0 ? theme.pnlUp : theme.pnlDown,
+    color: pnlColor(frame.totalPnl, theme),
     font: font(theme, unit * 5.2, 'bold'),
     align: 'right',
     baseline: 'top',
@@ -124,14 +134,10 @@ function drawStatsBar(ctx: Canvas2D, c: LayerContext): void {
     [
       fundingEstimated ? 'FUNDING (EST)' : 'FUNDING',
       signedUsd(frame.funding),
-      fundingEstimated ? theme.notice : theme.hudText,
+      fundingEstimated ? theme.notice : pnlColor(frame.funding, theme),
     ],
-    ['REALIZED', signedUsd(frame.realized), frame.realized >= 0 ? theme.pnlUp : theme.pnlDown],
-    [
-      'UNREALIZED',
-      signedUsd(frame.unrealized),
-      frame.unrealized >= 0 ? theme.pnlUp : theme.pnlDown,
-    ],
+    ['REALIZED', signedUsd(frame.realized), pnlColor(frame.realized, theme)],
+    ['UNREALIZED', signedUsd(frame.unrealized), pnlColor(frame.unrealized, theme)],
     ['HOLDING', usd(frame.holdingValue), theme.hudText],
   ];
 

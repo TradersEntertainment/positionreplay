@@ -283,6 +283,25 @@ describe('renderFrame — HUD honesty', () => {
     expect(texts(calls).some((t) => t.includes('Fill history unavailable'))).toBe(true);
   });
 
+  it('paints a zero PnL neutral, not green', () => {
+    const { episode, series, frames } = scenario();
+    const { ctx, calls } = recordingContext();
+    // Frame 5 is before the position opens: everything is exactly zero.
+    renderFrame(ctx, frames[5]!, episode, series, createScale(), darkTheme, LAYOUT);
+
+    const beforeText = (needle: string): string | undefined => {
+      const index = calls.findIndex((c) => c.op === 'fillText' && c.args[0] === needle);
+      if (index === -1) return undefined;
+      for (let i = index; i >= 0; i--) {
+        if (calls[i]!.op === 'set:fillStyle') return String(calls[i]!.args[0]);
+      }
+      return undefined;
+    };
+
+    expect(beforeText('$0.00')).toBe(darkTheme.hudText);
+    expect(beforeText('$0.00')).not.toBe(darkTheme.pnlUp);
+  });
+
   it('says CLOSED rather than reporting a zero-size position', () => {
     const { episode, series, frames } = scenario();
     const { ctx, calls } = recordingContext();
