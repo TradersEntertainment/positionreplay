@@ -53,6 +53,25 @@ const DEGREES = 10;
 /** Frames between melody notes. Eight at SPEC §6.3's 24fps is three notes a second. */
 export const LEAD_EVERY = 8;
 
+/**
+ * How big a candle has to be to get its own note.
+ *
+ * Every frame reveals a bar, so an ungated note-per-candle is 24 notes a second — not
+ * music, and it would make a large candle indistinguishable from a small one, which is
+ * the opposite of the point. Above this the bar sounds, below it the bar is silent, and
+ * the contrast is what makes a big move audible as a big move.
+ */
+export const BAR_NOTE_FLOOR = 0.3;
+
+/**
+ * Frames that must pass between two bar notes.
+ *
+ * A run of large candles would otherwise fire on consecutive frames and arrive as a
+ * chord rather than as a run. Three frames caps it at eight notes a second, which is
+ * fast enough to feel urgent and slow enough to still be a melody.
+ */
+export const BAR_NOTE_GAP = 3;
+
 /** Turn a pentatonic degree into a MIDI note, wrapping octaves as it climbs. */
 export function degreeToMidi(degree: number, scale: readonly number[]): number {
   const size = scale.length;
@@ -81,6 +100,7 @@ export function composeScore(
   const scale = finalPnl >= 0 ? MAJOR_PENTATONIC : MINOR_PENTATONIC;
 
   const notes: Note[] = [];
+  let lastBarNote = Number.NEGATIVE_INFINITY;
 
   for (let i = 0; i < frames.length; i++) {
     const e = energy[i];
@@ -90,15 +110,26 @@ export function composeScore(
     // put the accent after the flash, and a note that arrives late reads as a mistake
     // rather than as an accent.
     const accent = (e.newHigh || e.newLow) && i > 0;
-    if (!accent && i % LEAD_EVERY !== 0) continue;
+
+    // A candle big enough to see gets a note of its own, so the melody follows the
+    // chart bar by bar instead of only marking the record highs and lows.
+    const size = Math.abs(e.barMove);
+    const bar = size >= BAR_NOTE_FLOOR && i - lastBarNote >= BAR_NOTE_GAP;
+    if (bar) lastBarNote = i;
+
+    if (!accent && !bar && i % LEAD_EVERY !== 0) continue;
 
     const degree = Math.round(e.level * (DEGREES - 1));
     notes.push({
       frame: i,
       // An accent is an octave up: the same note of the same scale, so it cannot clash.
       midi: degreeToMidi(degree, scale) + (accent ? 12 : 0),
-      velocity: clamp01(0.3 + Math.abs(e.momentum) * 0.5 + (accent ? 0.2 : 0)),
-      duration: accent ? 1.8 : 1.2,
+      // The candle's own size is the loudest term when it is what fired the note. A
+      // beat that nothing prompted stays quiet, so the two do not sound alike.
+      velocity: clamp01(
+        0.22 + Math.abs(e.momentum) * 0.3 + (bar ? size * 0.55 : 0) + (accent ? 0.15 : 0),
+      ),
+      duration: accent ? 1.8 : bar ? 0.9 : 1.2,
       voice: 'lead',
     });
   }

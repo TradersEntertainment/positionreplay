@@ -32,6 +32,19 @@ export interface FrameEnergy {
   newLow: boolean;
   /** Frames since the last new extreme; drives how fast a flash decays. */
   sinceExtreme: number;
+  /**
+   * The bar revealed on this frame, -1..1, scaled against the replay's biggest bar.
+   *
+   * Close-to-close rather than high-to-low. A doji with long wicks *looks* enormous and
+   * moves the position by nothing; what a viewer is reacting to when a candle "hits" is
+   * the money, and close-to-close is what the PnL fold actually consumes. Measured from
+   * `markPrice`, which is one value per frame, so no series is needed here.
+   *
+   * This is the per-bar channel. `momentum` is a half-second average and is deliberately
+   * smooth; this one is not smoothed at all, so every candle gets its own reaction at
+   * its own size.
+   */
+  barMove: number;
 }
 
 export const NEUTRAL_ENERGY: FrameEnergy = {
@@ -40,6 +53,7 @@ export const NEUTRAL_ENERGY: FrameEnergy = {
   newHigh: false,
   newLow: false,
   sinceExtreme: Number.POSITIVE_INFINITY,
+  barMove: 0,
 };
 
 /** Frames the momentum window looks back over. Half a second at SPEC §6.3's 24fps. */
@@ -66,9 +80,13 @@ export function computeEnergyTrack(
   // that momentum means the same thing at frame 5 and at frame 500 — scaling against a
   // running maximum would make early frames look violent and late ones dead.
   let largestMove = 0;
+  let largestBar = 0;
   for (let i = 0; i < frames.length; i++) {
     const before = frames[Math.max(0, i - window)]!.totalPnl;
     largestMove = Math.max(largestMove, Math.abs(frames[i]!.totalPnl - before));
+    if (i > 0) {
+      largestBar = Math.max(largestBar, Math.abs(frames[i]!.markPrice - frames[i - 1]!.markPrice));
+    }
   }
 
   return frames.map((frame, i) => {
@@ -82,6 +100,7 @@ export function computeEnergyTrack(
     if (newHigh || newLow) lastExtreme = i;
 
     const span = best - worst;
+    const bar = i > 0 ? frame.markPrice - frames[i - 1]!.markPrice : 0;
 
     return {
       // A flat replay has largestMove 0; dividing would be NaN, and NaN reaches a
@@ -91,6 +110,9 @@ export function computeEnergyTrack(
       newHigh,
       newLow,
       sinceExtreme: i - lastExtreme,
+      // Scaled against the replay's own biggest bar for the same reason momentum is:
+      // a $40 candle is a whole day's range on one chart and a rounding error on another.
+      barMove: largestBar > 0 ? clamp(bar / largestBar, -1, 1) : 0,
     };
   });
 }

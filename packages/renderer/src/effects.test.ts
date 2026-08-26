@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { Frame } from '@trade-replay/core';
 import { computeEnergyTrack, flashStrength, meterCells } from './effects.js';
 
-function framesOf(pnls: number[]): Frame[] {
+function framesOf(pnls: number[], marks?: number[]): Frame[] {
   return pnls.map((totalPnl, i) => ({
     t: i * 60_000,
     visibleUpTo: i,
-    markPrice: 100,
+    markPrice: marks?.[i] ?? 100,
     netSize: 1,
     avgEntry: 100,
     realized: 0,
@@ -89,6 +89,52 @@ describe('computeEnergyTrack', () => {
 
   it('produces one entry per frame', () => {
     expect(computeEnergyTrack(framesOf([1, 2, 3, 4, 5]))).toHaveLength(5);
+  });
+});
+
+describe('computeEnergyTrack — barMove', () => {
+  /**
+   * Flat PnL for exactly as many frames as there are marks.
+   *
+   * A shorter mark array does not mean "and then nothing happened" — the frames past it
+   * fall back to the default price, which is itself a candle, and usually the biggest
+   * one in the replay.
+   */
+  const flatFor = (marks: number[]): number[] => new Array(marks.length).fill(0);
+
+  it('is zero on the first frame, which has no bar before it', () => {
+    expect(computeEnergyTrack(framesOf(flatFor([100, 150, 120]), [100, 150, 120]))[0]!.barMove).toBe(0);
+  });
+
+  it('is signed by the candle direction', () => {
+    const track = computeEnergyTrack(framesOf(flatFor([100, 130, 110]), [100, 130, 110]));
+    expect(track[1]!.barMove).toBeGreaterThan(0);
+    expect(track[2]!.barMove).toBeLessThan(0);
+  });
+
+  it('reaches 1 on the replay\'s largest candle and stays proportional below it', () => {
+    // Scaled against the replay's own biggest bar, for the same reason momentum is: a
+    // $40 candle is a whole day's range on one chart and a rounding error on another.
+    const track = computeEnergyTrack(framesOf(flatFor([100, 110, 130, 230]), [100, 110, 130, 230]));
+    expect(track[3]!.barMove).toBeCloseTo(1, 10);
+    expect(track[2]!.barMove).toBeCloseTo(0.2, 10);
+    expect(track[1]!.barMove).toBeCloseTo(0.1, 10);
+  });
+
+  it('is zero throughout a chart that never moves', () => {
+    // No division by a zero largest bar, which would be NaN — and a NaN reaches an
+    // alpha calculation and paints nothing at all.
+    for (const e of computeEnergyTrack(framesOf(flatFor([1, 2, 3, 4, 5])))) {
+      expect(e.barMove).toBe(0);
+    }
+  });
+
+  it('is independent of PnL, so a flat position still reacts to the chart', () => {
+    // The two channels answer different questions: `level` is where the money is,
+    // `barMove` is what the market just did.
+    const track = computeEnergyTrack(framesOf(flatFor([100, 100, 180]), [100, 100, 180]));
+    expect(track[2]!.barMove).toBeCloseTo(1, 10);
+    expect(track[2]!.level).toBe(0.5);
   });
 });
 
