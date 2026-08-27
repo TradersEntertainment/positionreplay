@@ -44,7 +44,7 @@ import {
   replayIdForEpisode,
   seriesRangeFor,
 } from '@trade-replay/core';
-import type { PositionEpisode, PriceSeries, TimeRange, VenueId } from '@trade-replay/core';
+import type { Candle, PositionEpisode, PriceSeries, TimeRange, VenueId } from '@trade-replay/core';
 
 /**
  * One SQLite connection for the whole process, opened lazily.
@@ -457,6 +457,59 @@ export async function loadInstrumentList(venue: string): Promise<InstrumentListi
     csvStore: csvStore(),
   });
   return adapter.listInstruments(source.ctx);
+}
+
+/**
+ * How far back the builder can place a trade, and at what resolution.
+ *
+ * Ninety days of hourly bars is about 2160 candles — three paginated requests, and fine
+ * enough that "I bought at 86,000" lands on the right hour rather than the right day.
+ * Wider or finer is a bigger fetch for a form someone is filling in by hand.
+ */
+export const BUILDER_WINDOW_DAYS = 90;
+export const BUILDER_INTERVAL = '1h';
+
+export interface CandleWindow {
+  instrument: string;
+  interval: string;
+  from: number;
+  to: number;
+  candles: Candle[];
+}
+
+/**
+ * Recent candles for one market, for estimating a manual position's blanks.
+ *
+ * Returns `ohlcv` only. The estimation rule reads each bar's low and high — a wick to
+ * 86,000 is the market having been at 86,000 — and a `line` series has neither, so a
+ * venue serving one for this interval would silently narrow every match to exact closes.
+ */
+export async function loadCandles(venue: string, instrument: string): Promise<CandleWindow> {
+  if (!isSupportedVenue(venue)) {
+    throw new Error(`No adapter for venue "${venue}".`);
+  }
+  const adapter = adapterFor(venue);
+  const source = createSource(fixtureFromEnv(), {
+    venue,
+    cache: cache(),
+    csvStore: csvStore(),
+  });
+
+  const to = Date.now();
+  const from = to - BUILDER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const series = await adapter.fetchSeries(
+    { instrument, interval: BUILDER_INTERVAL, from, to },
+    source.ctx,
+  );
+
+  if (series.kind !== 'ohlcv') {
+    throw new Error(
+      `This market serves a line series at ${BUILDER_INTERVAL}, which has no highs or ` +
+        `lows to match a price against.`,
+    );
+  }
+
+  return { instrument, interval: series.interval, from, to, candles: series.candles };
 }
 
 export async function loadReplay(

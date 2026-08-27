@@ -154,6 +154,13 @@ export function VenueBar(): ReactNode {
         {PLANNED.map((venue) => (
           <VenueChip key={venue} venue={venue} />
         ))}
+        <Link
+          href="/build"
+          data-testid="header-build-link"
+          className="border border-tr-line px-2 py-1 text-xs hover:border-tr-up"
+        >
+          Build
+        </Link>
         {commit ? (
           // Pushed to the right, dim, out of the way. It answers "is my change live?"
           // without being something a visitor has to read.

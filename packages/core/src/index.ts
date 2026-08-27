@@ -11,3 +11,4 @@ export * from './timeline.js';
 export * from './playback.js';
 export * from './replayId.js';
 export * from './manual.js';
+export * from './estimate.js';

@@ -28,3 +28,26 @@ body {
 * {
   border-radius: 0;
 }
+
+/*
+ * Visually hidden, still focusable and still submitted.
+ *
+ * Used for the CSV file input, whose native button text and "no file chosen" are drawn
+ * by the browser in the browser's own language and cannot be restyled. `display: none`
+ * would take it out of the tab order and out of the form; this keeps both.
+ *
+ * Tailwind ships this class, but the file input is inside a plain form that must work
+ * with JavaScript off, so it is written out here rather than depending on the utility
+ * surviving a purge of a class name that appears in no scanned template.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}

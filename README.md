@@ -221,8 +221,32 @@ cropped out:
   rule as leverage and Perps funding.
 - No address is shown, because there is no account.
 
-`pnpm verify:build` drives the whole flow in a browser and checks the colour of the tag
-in the canvas pixels, not just the text on the page.
+### You do not have to know the timestamps
+
+Nobody remembers when they filled — they remember the price. Leave the date blank, type
+"bought at 86,000, sold at 91,000", and press **Estimate blanks**.
+
+A missing price comes from the close of the candle at that time. A missing date comes from
+**the most recent time the market touched that price**, counting a wick: a spike to 86,000
+is the market having been at 86,000, which is what someone means when they say they filled
+there.
+
+Rows resolve **as a chain, backwards from the last** — not one at a time. Independently,
+each price's most recent touch can easily put the exit before the entry, which is not a
+position at all. Each blank date takes the latest bar touching its price *strictly before*
+the row below it, so the order holds by construction. Typed values are anchors and are
+never overwritten.
+
+A price the market never reached is **reported, not filled in** — naming the miss is the
+whole difference between a tool and a random number. Estimated values show in orange and
+stay editable; editing one makes it yours again.
+
+The rule is `estimateRows` in `packages/core/src/estimate.ts`: pure, over `Candle[]`, with
+its own test suite. The window is 90 days of hourly bars.
+
+`pnpm verify:build` drives the whole flow in a browser — including estimating from prices
+alone and asserting the dates come back in order — and checks the colour of the CONSTRUCTED
+tag in the canvas pixels, not just the text on the page.
 
 ## Polymarket Perps: the address, and what it cannot show
 

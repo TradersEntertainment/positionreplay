@@ -28,11 +28,6 @@ function record(name: string, passed: boolean, detail: string): void {
   console.log(`        ${detail}`);
 }
 
-/** `datetime-local` wants the viewer's own wall clock, with no zone suffix. */
-function localInput(iso: string): string {
-  return iso;
-}
-
 async function fillRow(
   page: Page,
   index: number,
@@ -41,7 +36,7 @@ async function fillRow(
   size: string,
   price: string,
 ): Promise<void> {
-  await page.getByTestId(`builder-when-${index}`).fill(localInput(when));
+  await page.getByTestId(`builder-when-${index}`).fill(when);
   await page.getByTestId(`builder-side-${index}`).selectOption(side);
   await page.getByTestId(`builder-size-${index}`).fill(size);
   await page.getByTestId(`builder-price-${index}`).fill(price);
@@ -119,8 +114,8 @@ async function run(browser: Browser): Promise<void> {
 
   // --- build a losing long on the fixture's BTC market ---
   await page.getByTestId('builder-instrument').selectOption({ index: 0 });
-  await fillRow(page, 0, '2026-08-20T02:00', 'buy', '0.5', '91000');
-  await fillRow(page, 1, '2026-08-21T04:00', 'sell', '0.5', '85000');
+  await fillRow(page, 0, '2026-08-20 02:00', 'buy', '0.5', '91000');
+  await fillRow(page, 1, '2026-08-21 04:00', 'sell', '0.5', '85000');
   writeFileSync(join(SHOTS, 'build-01-form.png'), await page.screenshot());
 
   await page.getByTestId('builder-submit').click();
@@ -131,7 +126,8 @@ async function run(browser: Browser): Promise<void> {
     return Boolean(canvas && canvas.width > 100);
   });
 
-  record('the typed position replays', true, await page.url());
+  const url0 = page.url();
+  record('the typed position replays', true, url0);
 
   const frameCount = await page.getAttribute('[data-testid="player"]', 'data-frame-count');
   record(
@@ -139,6 +135,79 @@ async function run(browser: Browser): Promise<void> {
     Number(frameCount) > 20,
     `${frameCount} frames`,
   );
+
+  // --- estimation: the reason the form is usable without knowing timestamps ---
+  await page.goto(`${BASE}/build`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => {
+    const select = document.querySelector<HTMLSelectElement>('[data-testid="builder-instrument"]');
+    return Boolean(select && select.options.length > 0);
+  });
+
+  // Estimate needs the market's candles, which arrive in their own request. Clicking
+  // before they land tests the loading message, not the estimation.
+  await page.waitForFunction(() => {
+    const root = document.querySelector('[data-testid="position-builder"]');
+    return Number(root?.getAttribute('data-candles') ?? 0) > 0;
+  }, undefined, { timeout: 20_000 });
+
+  // Prices only, no dates — the case the whole feature exists for.
+  await page.getByTestId('builder-size-0').fill('0.5');
+  await page.getByTestId('builder-price-0').fill('91000');
+  await page.getByTestId('builder-size-1').fill('0.5');
+  await page.getByTestId('builder-price-1').fill('92000');
+  await page.getByTestId('builder-estimate').click();
+  await page.waitForTimeout(600);
+
+  const whenA = await page.getByTestId('builder-when-0').inputValue();
+  const whenB = await page.getByTestId('builder-when-1').inputValue();
+  record(
+    'Estimate fills the dates from prices alone',
+    whenA !== '' && whenB !== '',
+    `row 1 "${whenA}", row 2 "${whenB}"`,
+  );
+
+  // The point of resolving as a chain rather than row by row: independently, each price's
+  // most recent touch can put the exit before the entry, which is not a position.
+  record(
+    'the estimated dates are in order, entry before exit',
+    whenA !== '' && whenB !== '' && whenA < whenB,
+    `${whenA} < ${whenB}`,
+  );
+
+  record(
+    'an estimated field is marked as estimated',
+    (await page.getByTestId('builder-when-0').getAttribute('data-estimated')) === 'true',
+    'row 1 date carries data-estimated',
+  );
+
+  // Editing an estimate makes it yours again, so the next pass treats it as an anchor.
+  await page.getByTestId('builder-when-0').fill('2026-08-20 02:00');
+  record(
+    'editing an estimated field clears the mark',
+    (await page.getByTestId('builder-when-0').getAttribute('data-estimated')) === 'false',
+    'the mark is dropped on edit',
+  );
+
+  // A price the market never reached must be named, not silently slid to the nearest bar.
+  await page.getByTestId('builder-when-0').fill('');
+  await page.getByTestId('builder-price-0').fill('999999999');
+  await page.getByTestId('builder-estimate').click();
+  await page.waitForTimeout(400);
+  const missText = ((await page.getByTestId('builder-error').textContent()) ?? '').trim();
+  record(
+    'an impossible price is reported, not filled in',
+    /never/i.test(missText),
+    missText.slice(0, 90),
+  );
+  writeFileSync(join(SHOTS, 'build-03-estimate.png'), await page.screenshot());
+
+  // --- back to the replay for the labelling checks ---
+  await page.goto(url0, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid="replay-canvas"]');
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('[data-testid="replay-canvas"]');
+    return Boolean(canvas && canvas.width > 100);
+  });
 
   // --- the labelling, which is the point ---
   record(
@@ -157,7 +226,7 @@ async function run(browser: Browser): Promise<void> {
   writeFileSync(join(SHOTS, 'build-02-replay.png'), await page.screenshot());
 
   // --- the link is the whole position ---
-  const url = page.url();
+  const url = url0;
   await page.goto(url, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="constructed-badge"]');
   record(
@@ -176,6 +245,26 @@ async function run(browser: Browser): Promise<void> {
     'a malformed link is refused, not crashed on',
     response?.status() === 404,
     `HTTP ${response?.status()}`,
+  );
+
+  // The file input's native button text is drawn by the browser in the browser's
+  // language, which is how Turkish appeared on an English page. Hiding it behind our own
+  // label is the fix, and this is the check that it stayed hidden.
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  const nativeFileInput = await page.$$eval('input[type="file"]', (nodes) =>
+    nodes.map((n) => getComputedStyle(n).position === 'absolute' && n.clientWidth <= 1),
+  );
+  record(
+    'no native file-input chrome renders its own language',
+    nativeFileInput.length > 0 && nativeFileInput.every(Boolean),
+    `${nativeFileInput.length} file input(s), all visually hidden behind our own label`,
+  );
+
+  record(
+    'the builder is offered as a panel, not buried in a sentence',
+    (await page.getByTestId('build-link').isVisible()) &&
+      (await page.getByTestId('header-build-link').isVisible()),
+    'landing-page panel and header link both present',
   );
 
   record(

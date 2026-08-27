@@ -92,9 +92,29 @@ export default async function Home({
         ) : null}
       </p>
 
-      {/* SPEC §8's CSV drop zone. A plain file input: it is the drop target browsers
-          already give for free, it works without JavaScript, and it is the same thing
-          a keyboard user reaches. */}
+      {/* The builder, as a panel rather than a line of link text below two banners. It
+          is the only entry point that needs no address at all, which makes it the one
+          most people can actually use. */}
+      <div className="mt-8 border border-tr-up/40 bg-tr-up/5 p-4">
+        <p className="text-sm font-bold">…or build a position by hand</p>
+        <p className="mt-1 text-xs text-tr-dim">
+          Pick a market and say what you remember — &ldquo;bought at 86,000, sold at
+          91,000&rdquo;. The dates are filled in from the real chart. No address needed.
+        </p>
+        <Link
+          href="/build"
+          data-testid="build-link"
+          className="mt-3 inline-block border border-tr-line bg-tr-panel px-4 py-2 text-sm hover:border-tr-up"
+        >
+          Open the builder
+        </Link>
+      </div>
+
+      {/* SPEC §8's CSV drop zone. The native file input is hidden behind our own label:
+          its button text and "no file chosen" are rendered by the browser in the
+          browser's language, which is where Turkish appeared on an otherwise English
+          page. The input element itself stays, so this still submits without JavaScript
+          and is still reachable by keyboard. */}
       <form
         method="POST"
         action="/api/csv/upload"
@@ -108,14 +128,18 @@ export default async function Home({
           header names are required. Up to {MAX_UPLOAD_BYTES / 1_048_576} MB.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <input
-            type="file"
-            name="file"
-            accept=".csv,.txt,text/csv,text/plain"
-            aria-label="Trades CSV"
-            data-testid="csv-input"
-            className="flex-1 border border-tr-line bg-tr-panel px-3 py-2 text-sm file:mr-3 file:border-0 file:bg-transparent file:text-tr-text"
-          />
+          <label className="flex flex-1 cursor-pointer items-center gap-3 border border-tr-line bg-tr-panel px-3 py-2 text-sm hover:border-tr-up">
+            <span className="border border-tr-line px-3 py-1 text-xs">Choose a file</span>
+            <span className="text-xs text-tr-dim">CSV or TSV, any exchange</span>
+            <input
+              type="file"
+              name="file"
+              accept=".csv,.txt,text/csv,text/plain"
+              aria-label="Trades CSV"
+              data-testid="csv-input"
+              className="sr-only"
+            />
+          </label>
           <button
             type="submit"
             data-testid="csv-submit"
@@ -144,15 +168,6 @@ export default async function Home({
       </ul>
 
       <p className="mt-8 text-sm text-tr-dim">
-        …or{' '}
-        <Link href="/build" className="underline hover:text-tr-text" data-testid="build-link">
-          build a position by hand
-        </Link>{' '}
-        — pick a market, type the entries and exits, and watch it play against the real
-        chart.
-      </p>
-
-      <p className="mt-4 text-sm text-tr-dim">
         Try{' '}
         <Link href={`/a/hyperliquid/${EXAMPLE}`} className="underline hover:text-tr-text">
           {EXAMPLE}
