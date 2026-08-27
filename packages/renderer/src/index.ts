@@ -8,6 +8,7 @@
 export * from './types.js';
 export * from './theme.js';
 export * from './scale.js';
+export * from './candles.js';
 export * from './render.js';
 export * from './sequence.js';
 export * from './effects.js';

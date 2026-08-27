@@ -221,6 +221,25 @@ cropped out:
   rule as leverage and Perps funding.
 - No address is shown, because there is no account.
 
+### Click the chart
+
+The builder's chart is the way in: click a bar to place a buy, click again for the sell.
+The side alternates on its own, because that is what a position does — override it when
+you are scaling in.
+
+A click is snapped in both axes, and for the same reason each time:
+
+- **The time snaps to the bar.** The data has bar granularity; reporting a minute inside
+  an hourly candle would be inventing a timestamp.
+- **The price snaps into that bar's low–high range, at the market's own scale.** You
+  cannot have filled where the market never traded, and a click lands on a continuous
+  pixel — fourteen significant digits would claim a precision the data does not have. The
+  order of those two operations is the whole subtlety; see `apps/web/lib/price.ts`.
+
+The bars come from `drawCandleSeries`, the same function the replay renderer uses, so what
+you click is exactly what plays back. The table below the chart stays: it is where a click
+gets corrected and where the size goes.
+
 ### You do not have to know the timestamps
 
 Nobody remembers when they filled — they remember the price. Leave the date blank, type

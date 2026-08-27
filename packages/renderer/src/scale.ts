@@ -122,6 +122,33 @@ export function indexToX(index: number, domainEnd: number, plot: Plot): number {
 }
 
 /**
+ * `priceToY` backwards: what price is under this pixel.
+ *
+ * For the builder's chart, where a click has to become a price. Kept beside its forward
+ * twin so the two cannot drift — a picker that disagreed with the renderer by a few
+ * pixels would place trades slightly off the candle a person aimed at.
+ *
+ * A zero span means every price maps to the same row, so there is nothing to invert;
+ * the midpoint is returned, matching what `priceToY` drew.
+ */
+export function yToPrice(y: number, scale: Bounds, plot: Plot): number {
+  const span = scale.max - scale.min;
+  if (span <= 0 || plot.height <= 0) return scale.min;
+  return scale.min + ((plot.y1 - y) / plot.height) * span;
+}
+
+/**
+ * `indexToX` backwards, as a fractional bar index.
+ *
+ * Fractional rather than rounded: the caller decides whether a click between two bars
+ * belongs to the earlier or the nearer one, and rounding here would hide that choice.
+ */
+export function xToIndex(x: number, domainEnd: number, plot: Plot): number {
+  if (domainEnd <= 0 || plot.width <= 0) return 0;
+  return ((x - plot.x0) / plot.width) * domainEnd;
+}
+
+/**
  * SPEC §7.2: "(a) fixed full-episode x-domain from frame 0 (bars appear left→right
  * into empty space), or (b) growing domain (bars compress as they accumulate). Ship
  * (b) as default, (a) as an option."

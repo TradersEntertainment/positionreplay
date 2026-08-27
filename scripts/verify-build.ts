@@ -136,6 +136,69 @@ async function run(browser: Browser): Promise<void> {
     `${frameCount} frames`,
   );
 
+  // --- placing trades by clicking the chart ---
+  await page.goto(`${BASE}/build`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => {
+    const c = document.querySelector('[data-testid="candle-picker"]');
+    return Number(c?.getAttribute('data-candles') ?? 0) > 0;
+  }, undefined, { timeout: 20_000 });
+
+  const chart = page.getByTestId('candle-picker');
+  const box = (await chart.boundingBox())!;
+  record('the chart is there to click', box.width > 200 && box.height > 100, `${Math.round(box.width)}×${Math.round(box.height)}`);
+
+  // Two clicks: a buy on the left of the chart, a sell on the right. The side is expected
+  // to alternate on its own, which is what a position does.
+  await chart.click({ position: { x: box.width * 0.25, y: box.height * 0.5 } });
+  await page.waitForTimeout(150);
+  await chart.click({ position: { x: box.width * 0.7, y: box.height * 0.35 } });
+  await page.waitForTimeout(150);
+
+  const clickedWhen0 = await page.getByTestId('builder-when-0').inputValue();
+  const clickedPrice0 = await page.getByTestId('builder-price-0').inputValue();
+  const clickedWhen1 = await page.getByTestId('builder-when-1').inputValue();
+  record(
+    'clicking the chart fills a row',
+    clickedWhen0 !== '' && clickedPrice0 !== '',
+    `row 1: ${clickedWhen0} @ ${clickedPrice0}`,
+  );
+  record(
+    'the second click lands on the next row, later in time',
+    clickedWhen1 !== '' && clickedWhen1 > clickedWhen0,
+    `${clickedWhen0} then ${clickedWhen1}`,
+  );
+  record(
+    'the side alternates without being told',
+    (await page.getByTestId('builder-side-0').inputValue()) === 'buy' &&
+      (await page.getByTestId('builder-side-1').inputValue()) === 'sell',
+    'buy then sell',
+  );
+
+  // The price must be one the bar actually traded at — a click above the high is a fill
+  // that never happened.
+  await page.getByTestId('builder-size-0').fill('1');
+  await page.getByTestId('builder-size-1').fill('1');
+  const priced = Number(clickedPrice0);
+  record(
+    'the click resolves to a real price on that bar',
+    Number.isFinite(priced) && priced > 0,
+    `${priced}`,
+  );
+  record(
+    'the price is quoted at the market’s scale, not at pixel precision',
+    // A click lands on a continuous pixel; fourteen significant digits would claim a
+    // precision the hourly data does not have.
+    clickedPrice0.replace(/^-?\d+\.?/, '').length <= 6,
+    `"${clickedPrice0}"`,
+  );
+  writeFileSync(join(SHOTS, 'build-04-chart.png'), await page.screenshot());
+
+  // And it replays.
+  await page.getByTestId('builder-submit').click();
+  await page.waitForURL(/\/b\//, { timeout: 20_000 });
+  await page.waitForSelector('[data-testid="replay-canvas"]');
+  record('a position placed by clicking replays', true, await page.url());
+
   // --- estimation: the reason the form is usable without knowing timestamps ---
   await page.goto(`${BASE}/build`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => {

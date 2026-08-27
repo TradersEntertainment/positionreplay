@@ -3,7 +3,12 @@
 /**
  * Build a position by hand: pick a market, say what you remember, replay it.
  *
- * You are not asked to know both halves of a row. People remember prices, not
+ * There are two ways in, and the chart is the better one. Click a bar to place a buy,
+ * click again to place the sell — "I bought here, I sold there" is how people describe a
+ * position. The table below stays: it is where a click gets corrected, where the size
+ * goes, and how someone who does remember the exact numbers types them.
+ *
+ * You are also not asked to know both halves of a row. People remember prices, not
  * timestamps — "I bought at 86,000 and sold at 91,000" — so **Estimate** resolves every
  * blank against the venue's real candles (`estimateRows` in packages/core). The rule and
  * its refusals live there; this file only collects the input and shows the result.
@@ -26,6 +31,8 @@ import {
 import type { Candle, ManualLeg } from '@trade-replay/core';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CandlePicker } from './CandlePicker';
+import type { PickerLeg } from './CandlePicker';
 
 export interface BuilderVenue {
   id: string;
@@ -171,6 +178,56 @@ export function PositionBuilder({ venues }: { venues: BuilderVenue[] }) {
   const displayName = useMemo(
     () => instruments.find((i) => i.instrument === instrument)?.displayName ?? '',
     [instruments, instrument],
+  );
+
+  /**
+   * The rows the chart can draw: those with both a time and a price.
+   *
+   * A half-filled row has nowhere to sit on a chart. It is not an error — Estimate exists
+   * for exactly that state — it simply has no marker yet.
+   */
+  const pickerLegs = useMemo<PickerLeg[]>(
+    () =>
+      rows
+        .map((row) => ({ ts: toEpoch(row.when), price: Number(row.price), side: row.side }))
+        .filter((leg) => Number.isFinite(leg.ts) && Number.isFinite(leg.price) && leg.price > 0),
+    [rows],
+  );
+
+  /**
+   * What the next click places.
+   *
+   * A position alternates, and starting from whatever the last placed row was means a
+   * buy/sell/buy/sell sequence needs no toggling at all. Overridable, because scaling
+   * into a position is two buys in a row.
+   */
+  const [sideOverride, setSideOverride] = useState<'buy' | 'sell' | null>(null);
+  const nextSide = useMemo<'buy' | 'sell'>(() => {
+    if (sideOverride) return sideOverride;
+    const placed = rows.filter((row) => !blank(row.when) && !blank(row.price));
+    const last = placed[placed.length - 1];
+    return last?.side === 'buy' ? 'sell' : 'buy';
+  }, [rows, sideOverride]);
+
+  /** A click on the chart fills the first empty row, or adds one. */
+  const place = useCallback(
+    (ts: number, price: number) => {
+      setError(null);
+      setSideOverride(null);
+      const filledIn = { when: fromEpoch(ts), price: String(price), estimated: [] as never[] };
+
+      setRows((current) => {
+        const target = current.findIndex((row) => blank(row.when) && blank(row.price));
+        if (target === -1) {
+          if (current.length >= MANUAL_MAX_LEGS) return current;
+          return [...current, { ...EMPTY, side: nextSide, ...filledIn }];
+        }
+        return current.map((row, i) =>
+          i === target ? { ...row, side: nextSide, ...filledIn } : row,
+        );
+      });
+    },
+    [nextSide],
   );
 
   const update = useCallback((index: number, patch: Partial<Row>) => {
@@ -348,6 +405,37 @@ export function PositionBuilder({ venues }: { venues: BuilderVenue[] }) {
         </p>
       ) : null}
 
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs text-tr-dim">
+          <span>Next click places</span>
+          {(['buy', 'sell'] as const).map((side) => (
+            <button
+              key={side}
+              type="button"
+              onClick={() => setSideOverride(side)}
+              aria-pressed={nextSide === side}
+              data-testid={`picker-side-${side}`}
+              className={`border px-2 py-0.5 ${
+                nextSide === side
+                  ? side === 'buy'
+                    ? 'border-tr-up text-tr-up'
+                    : 'border-tr-down text-tr-down'
+                  : 'border-tr-line text-tr-dim'
+              }`}
+            >
+              {side.toUpperCase()}
+            </button>
+          ))}
+          <span>· then alternates on its own</span>
+        </div>
+        <CandlePicker
+          candles={candles}
+          legs={pickerLegs}
+          onPick={place}
+          nextSide={nextSide}
+        />
+      </div>
+
       <table className="w-full border border-tr-line text-sm">
         <thead>
           <tr className="border-b border-tr-line text-left text-xs text-tr-dim">
@@ -464,7 +552,7 @@ export function PositionBuilder({ venues }: { venues: BuilderVenue[] }) {
       </div>
 
       <p className="text-xs text-tr-dim">
-        Fill in whichever half you remember. <strong>Estimate blanks</strong> resolves a
+        Click the chart above, or fill in whichever half you remember. <strong>Estimate blanks</strong> resolves a
         missing price from the candle at that time, and a missing date from the most recent
         time the market touched that price — working backwards so an exit never lands before
         its entry. Estimated values are shown in orange and stay editable.

@@ -3,6 +3,7 @@
  * clipped to visibleUpTo.
  */
 
+import { drawCandleSeries } from '../candles.js';
 import { indexToX, priceToY } from '../scale.js';
 import type { Canvas2D } from '../types.js';
 import type { LayerContext } from './context.js';
@@ -22,34 +23,22 @@ export function drawSeries(ctx: Canvas2D, c: LayerContext): void {
   ctx.restore();
 }
 
+/**
+ * The bars themselves live in candles.ts, shared with the builder's chart.
+ *
+ * One implementation, so a click on the picker lands on the same bar the replay draws.
+ */
 function drawCandles(ctx: Canvas2D, c: LayerContext, unit: number): void {
   if (c.series.kind !== 'ohlcv') return;
-  const { plot } = c.metrics;
-  const last = Math.min(c.frame.visibleUpTo, c.series.candles.length - 1);
 
-  const slot = plot.width / Math.max(1, c.xDomain);
-  const bodyWidth = Math.max(1, slot * 0.68);
-  const wickWidth = Math.max(1, Math.min(bodyWidth * 0.18, unit * 0.16));
-
-  for (let i = 0; i <= last; i++) {
-    const candle = c.series.candles[i]!;
-    const x = indexToX(i, c.xDomain, plot);
-    const up = candle.c >= candle.o;
-    const color = up ? c.theme.candleUp : c.theme.candleDown;
-
-    const yHigh = priceToY(candle.h, c.scale, plot);
-    const yLow = priceToY(candle.l, c.scale, plot);
-    const yOpen = priceToY(candle.o, c.scale, plot);
-    const yClose = priceToY(candle.c, c.scale, plot);
-
-    ctx.fillStyle = color;
-    ctx.fillRect(x - wickWidth / 2, yHigh, wickWidth, Math.max(wickWidth, yLow - yHigh));
-
-    const top = Math.min(yOpen, yClose);
-    // A doji still needs a visible mark, so floor the body height at the wick width.
-    const height = Math.max(wickWidth, Math.abs(yClose - yOpen));
-    ctx.fillRect(x - bodyWidth / 2, top, bodyWidth, height);
-  }
+  drawCandleSeries(ctx, c.series.candles, {
+    upTo: c.frame.visibleUpTo,
+    xDomain: c.xDomain,
+    scale: c.scale,
+    plot: c.metrics.plot,
+    unit,
+    style: { up: c.theme.candleUp, down: c.theme.candleDown },
+  });
 }
 
 function drawLine(ctx: Canvas2D, c: LayerContext): void {

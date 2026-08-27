@@ -9,6 +9,8 @@ import {
   priceToY,
   stepScale,
   xDomainFor,
+  xToIndex,
+  yToPrice,
 } from './scale.js';
 
 function ohlcv(closes: number[]): PriceSeries {
@@ -224,5 +226,44 @@ describe('computeBounds — fill prices outside the candle range', () => {
     const bounds = computeBounds(series, 9, null, BOUNDS_PADDING, [Number.NaN]);
     expect(Number.isFinite(bounds.min)).toBe(true);
     expect(Number.isFinite(bounds.max)).toBe(true);
+  });
+});
+
+describe('yToPrice / xToIndex', () => {
+  const plot = { x0: 40, y0: 20, x1: 440, y1: 320, width: 400, height: 300 };
+  const scale = { min: 100, max: 200 };
+
+  it('is the exact inverse of priceToY', () => {
+    // The builder's chart and the replay renderer have to agree to the pixel, or a
+    // click places a trade slightly off the candle it was aimed at.
+    for (const price of [100, 123.45, 150, 199.99, 200]) {
+      expect(yToPrice(priceToY(price, scale, plot), scale, plot)).toBeCloseTo(price, 9);
+    }
+  });
+
+  it('is the exact inverse of indexToX', () => {
+    for (const index of [0, 1, 17, 63.5, 100]) {
+      expect(xToIndex(indexToX(index, 100, plot), 100, plot)).toBeCloseTo(index, 9);
+    }
+  });
+
+  it('maps the plot edges to the ends of the scale', () => {
+    expect(yToPrice(plot.y1, scale, plot)).toBeCloseTo(100, 9);
+    expect(yToPrice(plot.y0, scale, plot)).toBeCloseTo(200, 9);
+    expect(xToIndex(plot.x0, 50, plot)).toBeCloseTo(0, 9);
+    expect(xToIndex(plot.x1, 50, plot)).toBeCloseTo(50, 9);
+  });
+
+  it('returns a fractional index rather than rounding', () => {
+    // Whether a click between two bars belongs to the earlier or the nearer one is the
+    // caller's decision; rounding here would make it silently.
+    expect(xToIndex(indexToX(3.5, 10, plot), 10, plot)).toBeCloseTo(3.5, 9);
+  });
+
+  it('does not divide by a zero span or a zero-width plot', () => {
+    expect(Number.isFinite(yToPrice(50, { min: 7, max: 7 }, plot))).toBe(true);
+    expect(
+      Number.isFinite(xToIndex(50, 10, { ...plot, width: 0, x1: plot.x0 })),
+    ).toBe(true);
   });
 });
