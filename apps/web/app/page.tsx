@@ -77,8 +77,19 @@ export default async function Home({
         </button>
       </form>
 
-      <p className="mt-2 text-xs text-tr-dim">
-        A 0x… address. Neither venue supports username lookup here.
+      <p className="mt-2 text-xs text-tr-dim" data-testid="address-hint">
+        A 0x… address — neither venue has a username lookup.{' '}
+        {chosen === 'polymarket-perps' ? (
+          // Said before the attempt, not only after it fails. Pasting the address from a
+          // polymarket.com profile is the obvious thing to try, and it is the one thing
+          // that cannot work: Predictions and Perps are separate account systems, and
+          // the Perps API rejects a proxy wallet outright.
+          <span className="text-tr-notice">
+            For Perps this must be the trader&apos;s <strong>Perps</strong> address. The one
+            in a polymarket.com profile link is their Predictions proxy wallet, which the
+            Perps API does not recognise.
+          </span>
+        ) : null}
       </p>
 
       {/* SPEC §8's CSV drop zone. A plain file input: it is the drop target browsers

@@ -86,13 +86,31 @@ function warn(ctx: AdapterContext | undefined, warning: AdapterWarning): void {
 }
 
 /**
+ * A polymarket.com profile link, and whoever it points at.
+ *
+ * Matched on the host so the explanation below — which names Polymarket and its proxy
+ * wallets — is never shown for a URL that has nothing to do with either. A confident
+ * wrong explanation is worse than a plain refusal.
+ */
+const PROFILE_URL = /^(?:https?:\/\/)?(?:www\.)?polymarket\.com\/(?:profile\/|@)([^/?#]+)/i;
+
+/**
  * SPEC §4.5 input handling.
  *
- * Polymarket does have a username system, but §4.5 flags the Gamma-to-Perps address
- * mapping as an unverified assumption and CLAUDE.md requires a curl check before the
- * resolver is written. Until that runs, a username is refused with the reason rather
- * than resolved to an address that may belong to a different system entirely —
- * §4.5: "Do not ship a resolver that silently returns 'no positions' for a valid trader."
+ * §4.5 called the Gamma-to-Perps address mapping an unverified assumption and required a
+ * live check before any resolver was written. That check has now run, against the real
+ * API: the Predictions proxy wallet a profile carries answers `400 {"error":"account not
+ * found"}` on Perps, while a Perps address answers 200 with a full history. The two are
+ * separate account systems.
+ *
+ * So the username route stays unbuilt — not out of caution now, but because it is known
+ * to resolve to the address that fails. §4.5: "Do not ship a resolver that silently
+ * returns 'no positions' for a valid trader — that reads as a bug in our app, not as an
+ * address mismatch."
+ *
+ * What is left is to make the refusal useful. Someone pasting a profile URL has done the
+ * reasonable thing, and being told the link was understood — and which address it holds —
+ * is a different experience from being told no.
  */
 async function parseInput(raw: string, ctx?: AdapterContext): Promise<AdapterInput> {
   const trimmed = raw.trim();
@@ -115,11 +133,26 @@ async function parseInput(raw: string, ctx?: AdapterContext): Promise<AdapterInp
     return { venue: 'polymarket-perps', address: resolved.toLowerCase(), label: trimmed };
   }
 
+  const profile = PROFILE_URL.exec(trimmed);
+  if (profile) {
+    const who = profile[1]!;
+    const carries = ADDRESS_RE.test(who)
+      ? `That link's address is ${who}, which is a Predictions proxy wallet.`
+      : `That link identifies "${who}" on the Predictions side.`;
+
+    throw new InvalidInputError(
+      `${carries} Polymarket Predictions and Polymarket Perps are a separate account ` +
+        `system each, with different addresses — the Perps API rejects a proxy wallet ` +
+        `outright rather than reporting an empty account. Enter the trader's Perps ` +
+        `address.`,
+    );
+  }
+
   throw new InvalidInputError(
-    `Username lookup is not available for Perps. Polymarket's public search returns a ` +
-      `Predictions-side profile address, and whether that is the same account on Perps ` +
-      `has not been verified — resolving it could quietly show the wrong trader, or none. ` +
-      `Enter the 0x… address directly.`,
+    `Perps has no username lookup. Polymarket's public search returns the Predictions-side ` +
+      `profile address, and Predictions and Perps are a separate account system each: that ` +
+      `address is rejected by the Perps API rather than returning an empty account. Enter ` +
+      `the trader's Perps address.`,
   );
 }
 

@@ -40,16 +40,53 @@ describe('parseInput (SPEC §4.5)', () => {
     expect(input).toMatchObject({ venue: 'polymarket-perps', address: ADDRESS });
   });
 
-  it('refuses a username, and says why rather than guessing', async () => {
-    // §4.5 flags the Gamma-to-Perps address mapping as unverified, and CLAUDE.md
-    // requires a curl check before the resolver exists. Guessing could show a
-    // different trader's position under someone's name.
+  it('refuses a username, and says the mapping was checked and does not work', async () => {
+    // §4.5 called the Gamma-to-Perps mapping an unverified assumption. It has since been
+    // checked against the live API: the Predictions proxy wallet answers 400 "account not
+    // found". So the refusal states a measured fact, not a caution.
     await expect(polymarketPerpsAdapter.parseInput('some_trader')).rejects.toThrow(
       InvalidInputError,
     );
     await expect(polymarketPerpsAdapter.parseInput('some_trader')).rejects.toThrow(
-      /has not been verified/,
+      /separate account system/i,
     );
+  });
+
+  it('recognises a Polymarket profile link and names the address it carries', async () => {
+    // Someone who pastes a profile URL has done the reasonable thing. Telling them the
+    // link was understood, and which address it holds, is the difference between an
+    // explanation and a rejection.
+    const url = 'https://polymarket.com/profile/0x6a151b00837bb18526c64d7ff4ffc54bdde2b4c6';
+
+    await expect(polymarketPerpsAdapter.parseInput(url)).rejects.toThrow(InvalidInputError);
+    await expect(polymarketPerpsAdapter.parseInput(url)).rejects.toThrow(/0x6a151b/);
+    await expect(polymarketPerpsAdapter.parseInput(url)).rejects.toThrow(/proxy wallet/i);
+  });
+
+  it('recognises a profile link that carries a name rather than an address', async () => {
+    await expect(polymarketPerpsAdapter.parseInput('polymarket.com/@ShadowPixel47')).rejects.toThrow(
+      /ShadowPixel47/,
+    );
+  });
+
+  it('does not mistake some other site\'s link for a Polymarket profile', async () => {
+    // The message names Polymarket specifically, so it must not be shown for a URL that
+    // has nothing to do with it — that would be a confident wrong explanation.
+    await expect(polymarketPerpsAdapter.parseInput('https://example.com/@someone')).rejects.toThrow(
+      /separate account system/i,
+    );
+    await expect(
+      polymarketPerpsAdapter.parseInput('https://example.com/@someone'),
+    ).rejects.not.toThrow(/proxy wallet/i);
+  });
+
+  it('still accepts a bare address, because only the venue can judge one', async () => {
+    // A Perps address and a Predictions proxy wallet are both 40 hex characters. Nothing
+    // here can tell them apart, so the venue does — a wrong one comes back as
+    // UnknownAccountError from the fills call, with its own explanation.
+    await expect(
+      polymarketPerpsAdapter.parseInput('0x6a151b00837bb18526c64d7ff4ffc54bdde2b4c6'),
+    ).resolves.toMatchObject({ address: '0x6a151b00837bb18526c64d7ff4ffc54bdde2b4c6' });
   });
 
   it('refuses an ENS name with no resolver rather than inventing one', async () => {

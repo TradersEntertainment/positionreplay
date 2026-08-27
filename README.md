@@ -240,9 +240,19 @@ What is still true:
 
 - **Perps uses a different address from the one a Polymarket profile shows.** A profile
   URL carries the *proxy wallet*; the Perps API answers `400 {"error":"account not
-  found"}` for it. Paste the address from the trader's Perps page. Getting this wrong
-  raises `UnknownAccountError` with that explanation rather than showing an empty
-  account, which SPEC §4.5 warns reads as a bug in this app.
+  found"}` for it. Predictions and Perps are a separate account system each.
+
+  This is also why there is **no username lookup**. SPEC §4.5 planned one through Gamma's
+  `public-search`, flagging the Gamma-to-Perps mapping as an unverified assumption. It has
+  since been checked live, and it does not hold: `public-search` returns
+  `profiles[].wallet`, which *is* the proxy wallet that 400s. A username resolver would
+  move the failure one hop later without removing it, which §4.5 forbids — "Do not ship a
+  resolver that silently returns 'no positions' for a valid trader."
+
+  So the app explains instead of failing. Pasting a `polymarket.com/@name` or
+  `/profile/0x…` link is recognised, named back to you, and refused with the reason; the
+  input hint says it before you try; a wrong bare address raises `UnknownAccountError`
+  from the venue's own 400.
 - **Funding shows `—`, not `$0.00`.** Per-account funding charges are authenticated-only
   (§4.4.2), and printing zero would assert that none was paid. The net PnL excludes it
   and says that it does.
