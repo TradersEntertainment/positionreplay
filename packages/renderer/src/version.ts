@@ -14,5 +14,6 @@
  * 1 — M8, the first server renders.
  * 2 — PnL-reactive effects (effects.ts) and the per-candle burst.
  * 3 — the closing card (outro.ts).
+ * 4 — the server render carries the soundtrack; before this the MP4 was silent.
  */
-export const RENDER_VERSION = 3;
+export const RENDER_VERSION = 4;

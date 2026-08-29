@@ -24,13 +24,28 @@ import { promisify } from 'node:util';
 import { createCanvas } from '@napi-rs/canvas';
 import { OUTRO_HOLD_FRAMES, buildFrames } from '@trade-replay/core';
 import type { Frame } from '@trade-replay/core';
-import { createSequenceRenderer, darkTheme, lightTheme } from '@trade-replay/renderer';
+import {
+  composeScore,
+  computeEnergyTrack,
+  createSequenceRenderer,
+  darkTheme,
+  encodeWav16,
+  lightTheme,
+  renderScorePcm,
+} from '@trade-replay/renderer';
 import type { Canvas2D } from '@trade-replay/renderer';
 import type { RenderSpec } from '@trade-replay/cache';
 import type { ReplayPayload } from './replay.js';
 import { buildSchedule, ffconcatFor } from './schedule.js';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * 48kHz, which is what AAC and every player expect. The synth is band-limited well
+ * under Nyquist at this rate, so nothing is gained by going higher and the WAV handed
+ * to ffmpeg would simply be larger.
+ */
+const AUDIO_SAMPLE_RATE = 48_000;
 
 export class RenderError extends Error {
   constructor(message: string) {
@@ -121,6 +136,32 @@ export async function renderMp4(options: RenderOptions): Promise<RenderOutput> {
   const playlist = join(workDir, 'frames.txt');
   writeFileSync(playlist, ffconcatFor(files, schedule.durations));
 
+  // The soundtrack, rendered offline.
+  //
+  // The browser's WebM records the live player's audio graph, so it has always carried
+  // the piano. This path builds the video from PNGs, so until now the MP4 — the file
+  // people actually download and post — was silent. Same score, same voice, scheduled
+  // against the same durations the pictures use, so the notes land on the frames they
+  // belong to even through SPEC §6.3's climax.
+  const notes = composeScore(frames, computeEnergyTrack(frames), payload.episode);
+  const audioPath = join(workDir, 'audio.wav');
+  let hasAudio = false;
+
+  if (notes.length > 0) {
+    const frameTimes: number[] = [];
+    let at = 0;
+    for (const duration of schedule.durations) {
+      frameTimes.push(at);
+      at += duration;
+    }
+
+    const pcm = renderScorePcm(notes, { sampleRate: AUDIO_SAMPLE_RATE, frameTimes });
+    if (pcm.length > 0) {
+      writeFileSync(audioPath, encodeWav16(pcm, AUDIO_SAMPLE_RATE));
+      hasAudio = true;
+    }
+  }
+
   try {
     await execFileAsync(
       ffmpeg,
@@ -136,12 +177,15 @@ export async function renderMp4(options: RenderOptions): Promise<RenderOutput> {
         '0',
         '-i',
         playlist,
+        ...(hasAudio ? ['-i', audioPath] : []),
         // Variable input timing resampled onto a constant output rate: the durations
         // carry the climax, `fps` makes the result a normal constant-rate MP4.
         '-vsync',
         'vfr',
         '-vf',
         `fps=${spec.fps},format=yuv420p`,
+        // Explicit once there are two inputs, so a stream is never picked by luck.
+        ...(hasAudio ? ['-map', '0:v:0', '-map', '1:a:0'] : []),
         '-c:v',
         'libx264',
         // SPEC §9 Phase 2's own settings. yuv420p is not optional: X will not play
@@ -150,6 +194,20 @@ export async function renderMp4(options: RenderOptions): Promise<RenderOutput> {
         'yuv420p',
         '-crf',
         '18',
+        ...(hasAudio
+          ? [
+              // AAC because it is what every phone and every timeline plays; the WebM
+              // path uses Opus, which an MP4 container will not carry usefully.
+              '-c:a',
+              'aac',
+              '-b:a',
+              '160k',
+              // The picture decides the length. The final note is scheduled to ring
+              // past the last frame and its tail is cut here — by then it is 20 dB
+              // down, and a file that outlasts its video reads as broken.
+              '-shortest',
+            ]
+          : []),
         // Moves the index to the front so the file plays while still downloading.
         '-movflags',
         '+faststart',

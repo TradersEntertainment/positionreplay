@@ -17,7 +17,17 @@
  * from a timer arrives late enough to hear.
  */
 
-import { midiToHz, type Note } from '@trade-replay/renderer';
+import {
+  ATTACK_SECONDS,
+  DECAY_FLOOR,
+  DETUNE_CENTS_PER_RATIO,
+  LIMITER,
+  MASTER_GAIN,
+  midiToHz,
+  partialsFor,
+  voicePeak,
+  type Note,
+} from '@trade-replay/renderer';
 
 /**
  * Notes allowed to sound in a single tick.
@@ -29,18 +39,11 @@ import { midiToHz, type Note } from '@trade-replay/renderer';
 const MAX_NOTES_PER_TICK = 3;
 
 /**
- * Master level.
- *
- * Raised from 0.22 after doing the arithmetic on a single note: velocity averages around
- * 0.5 and the voice peak was 0.4 of that, so one note landed near -30 dBFS. The exported
- * file measured -14.5 dB and looked fine because notes overlap there — but a lone piano
- * note at -30 dBFS on laptop speakers at half volume is a whisper, which is a perfectly
- * good explanation for "the site has no sound".
- *
- * Headroom for the overlap comes from the compressor below rather than from keeping
- * everything quiet.
+ * The voice — partials, level, envelope, limiter — comes from the renderer's synth.ts,
+ * which also renders it offline for the server's MP4. Two definitions of "what the piano
+ * sounds like" would mean the downloaded file was a different instrument from the one
+ * that was previewed.
  */
-const MASTER_GAIN = 0.5;
 
 export interface ReplayAudio {
   /**
@@ -127,11 +130,11 @@ export function createReplayAudio(
    * speakers and the recorder get the same signal.
    */
   const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -10;
-  limiter.knee.value = 6;
-  limiter.ratio.value = 12;
-  limiter.attack.value = 0.003;
-  limiter.release.value = 0.15;
+  limiter.threshold.value = LIMITER.thresholdDb;
+  limiter.knee.value = LIMITER.kneeDb;
+  limiter.ratio.value = LIMITER.ratio;
+  limiter.attack.value = LIMITER.attackSeconds;
+  limiter.release.value = LIMITER.releaseSeconds;
   master.connect(limiter);
 
   if (!options.silent) limiter.connect(ctx.destination);
@@ -161,35 +164,17 @@ export function createReplayAudio(
 
   function strike(note: Note, at: number): void {
     const hz = midiToHz(note.midi);
-    // The closing note is a bass note in everything but name: same register, same
-    // struck-string partials. Only the score cares that they are different events.
-    const bass = note.voice !== 'lead';
 
     const voice = ctx.createGain();
     voice.gain.value = 0;
     voice.connect(master);
 
-    // The harmonics fade faster than the fundamental, which is what makes a struck
-    // string sound struck instead of held.
-    const partials: [number, number, OscillatorType][] = bass
-      ? [
-          [1, 1, 'sine'],
-          [2, 0.18, 'sine'],
-        ]
-      : [
-          [1, 1, 'triangle'],
-          [2, 0.28, 'sine'],
-          [3, 0.12, 'sine'],
-        ];
-
     const oscillators: OscillatorNode[] = [];
-    for (const [ratio, level, type] of partials) {
+    for (const { ratio, level, wave } of partialsFor(note.voice)) {
       const osc = ctx.createOscillator();
-      osc.type = type;
+      osc.type = wave;
       osc.frequency.value = hz * ratio;
-      // A real string's upper partials sit slightly sharp of the exact multiple. A few
-      // cents is inaudible as pitch and is most of why this reads as an instrument.
-      osc.detune.value = ratio === 1 ? 0 : 4 * ratio;
+      osc.detune.value = ratio === 1 ? 0 : DETUNE_CENTS_PER_RATIO * ratio;
 
       const partial = ctx.createGain();
       partial.gain.value = level;
@@ -198,16 +183,14 @@ export function createReplayAudio(
       oscillators.push(osc);
     }
 
-    // Raised alongside MASTER_GAIN; the limiter above absorbs the overlaps.
-    const peak = note.velocity * (bass ? 0.9 : 0.7);
-    const attack = 0.004;
+    const peak = voicePeak(note);
     const end = at + note.duration;
 
     voice.gain.setValueAtTime(0, at);
-    voice.gain.linearRampToValueAtTime(peak, at + attack);
+    voice.gain.linearRampToValueAtTime(peak, at + ATTACK_SECONDS);
     // exponentialRamp cannot reach zero, so it decays to a floor and is then cut. A
     // linear ramp here sounds like a fade-out rather than a decay.
-    voice.gain.exponentialRampToValueAtTime(Math.max(peak * 0.001, 0.0001), end);
+    voice.gain.exponentialRampToValueAtTime(Math.max(peak * DECAY_FLOOR, 0.0001), end);
     voice.gain.setValueAtTime(0, end);
 
     for (const osc of oscillators) {

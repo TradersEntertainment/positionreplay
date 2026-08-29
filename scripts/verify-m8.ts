@@ -13,7 +13,7 @@
  * Needs a web server AND a worker already running, plus ffmpeg on PATH.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -42,10 +42,26 @@ async function saveDownload(download: Download, name: string): Promise<string> {
 }
 
 /** One field from ffprobe, so a claim about the file comes from a decoder. */
-function probe(path: string, entries: string): Record<string, string> {
+/**
+ * ffprobe fields as an object.
+ *
+ * `select` matters once the file has more than one stream: without it ffprobe prints a
+ * block per stream, the keys repeat, and the last one wins — which is how a video check
+ * ended up reading `codec_name=aac` the moment the MP4 gained a soundtrack.
+ */
+function probe(path: string, entries: string, select?: string): Record<string, string> {
   const output = execFileSync(
     FFPROBE,
-    ['-v', 'error', '-show_entries', entries, '-of', 'default=noprint_wrappers=1', path],
+    [
+      '-v',
+      'error',
+      ...(select ? ['-select_streams', select] : []),
+      '-show_entries',
+      entries,
+      '-of',
+      'default=noprint_wrappers=1',
+      path,
+    ],
     { encoding: 'utf8' },
   );
   return Object.fromEntries(
@@ -155,7 +171,7 @@ async function run(browser: Browser): Promise<void> {
   );
 
   // --- SPEC §9: H.264 + yuv420p, "required for X/Twitter" ---
-  const stream = probe(mp4, 'stream=codec_name,pix_fmt,width,height,nb_frames,r_frame_rate');
+  const stream = probe(mp4, 'stream=codec_name,pix_fmt,width,height,nb_frames,r_frame_rate', 'v:0');
   record(
     'H.264 with yuv420p, which is what X accepts',
     stream['codec_name'] === 'h264' && stream['pix_fmt'] === 'yuv420p',
@@ -176,6 +192,37 @@ async function run(browser: Browser): Promise<void> {
     'the video runs at replay speed, not at the container frame rate',
     Math.abs(duration - frameCount / 24) < 0.5,
     `${duration.toFixed(2)}s for ${frameCount} frames; ${(frameCount / 24).toFixed(2)}s expected`,
+  );
+
+  // --- the file people download actually has sound ---
+  //
+  // This is the check that was missing. The WebM export records the live player's audio
+  // graph, so verify:sound passing said nothing at all about the MP4: that one is built
+  // from PNGs by ffmpeg, and for eight milestones it had no audio stream to be silent.
+  // Not `probe()`: that flattens key=value lines into an object, and with two streams
+  // the second one's keys overwrite the first's. csv keeps them as separate rows.
+  const streams = execFileSync(
+    FFPROBE,
+    ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name', '-of', 'csv=p=0', mp4],
+    { encoding: 'utf8' },
+  ).trim();
+  record(
+    'the MP4 carries the soundtrack, not just the picture',
+    /(^|\n)[^\n]*audio/.test(streams),
+    streams.replace(/\n/g, ' | '),
+  );
+
+  // A track that exists and is silent would pass the check above and fail the only
+  // thing that matters. volumedetect reports -91 dB for digital silence, and writes its
+  // summary to stderr like every other ffmpeg filter report.
+  const level = spawnSync(FFMPEG, ['-v', 'info', '-i', mp4, '-af', 'volumedetect', '-f', 'null', '-'], {
+    encoding: 'utf8',
+  });
+  const peak = /max_volume:\s*(-?[\d.]+) dB/.exec(level.stderr ?? '')?.[1];
+  record(
+    'the MP4 audio is not silence',
+    peak !== undefined && Number(peak) > -40,
+    peak === undefined ? 'ffmpeg reported no level' : `peak ${peak} dB`,
   );
 
   // --- the §9 payoff: the server drew the same picture the browser did ---
