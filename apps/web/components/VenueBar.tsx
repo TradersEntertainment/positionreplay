@@ -17,7 +17,7 @@
  * which is exactly what a hand-maintained list would eventually do.
  */
 
-import { SUPPORTED_VENUES, VENUE_LABELS, adapterFor } from '@trade-replay/adapters';
+import { SUPPORTED_VENUES, VENUE_LABELS } from '@trade-replay/adapters';
 import { buildCommit } from '../lib/build';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -40,17 +40,6 @@ const PLANNED_LABELS: Record<string, string> = {
 function isLive(venue: string): boolean {
   return (SUPPORTED_VENUES as readonly string[]).includes(venue);
 }
-
-/**
- * Whether anything here has a leaderboard to browse.
- *
- * Read straight off the adapters rather than through `lib/data`, which would pull
- * better-sqlite3 into the root layout. Same derived rule as `isLive`, for the same
- * reason: a link cannot be advertised here and then fail when someone clicks it.
- */
-const hasLeaderboard = SUPPORTED_VENUES.some(
-  (venue) => adapterFor(venue).listLeaderboard !== undefined,
-);
 
 /**
  * The marks. 24x24, `currentColor`, straight segments only.
@@ -165,15 +154,6 @@ export function VenueBar(): ReactNode {
         {PLANNED.map((venue) => (
           <VenueChip key={venue} venue={venue} />
         ))}
-        {hasLeaderboard ? (
-          <Link
-            href="/top"
-            data-testid="header-top-link"
-            className="border border-tr-line px-2 py-1 text-xs hover:border-tr-up"
-          >
-            Top traders
-          </Link>
-        ) : null}
         <Link
           href="/build"
           data-testid="header-build-link"

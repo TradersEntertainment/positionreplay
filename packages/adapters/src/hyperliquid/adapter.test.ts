@@ -207,8 +207,8 @@ describe('fetchFills pagination (SPEC §4.3)', () => {
     // `withFillCache` only fetches the missing edges once a cache is warm. So the first
     // visitor to a truncated account saw the warning and every visitor after them saw
     // the same wrong average entry with none — which is exactly what §11 case 9 is for.
-    // The leaderboard makes the warm path the common one: everybody clicks the same
-    // handful of traders.
+    // The front page's featured traders make the warm path the common one: everybody
+    // clicks the same handful of accounts.
     const stored: RawFillRecord[] = [];
     let state: FillSyncState | null = null;
     const cache: FillCache = {

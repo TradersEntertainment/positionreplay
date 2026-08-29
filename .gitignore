@@ -28,6 +28,7 @@ build-*.png
 last-*.png
 m[0-9]-*.png
 m[0-9]-export.*
+featured-*.png
 sound-*.png
 sound-export.*
 replay.webm

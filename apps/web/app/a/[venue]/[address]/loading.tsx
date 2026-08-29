@@ -6,9 +6,9 @@
  * seconds. Without a fallback the browser simply sits on the previous page and the
  * click reads as having done nothing.
  *
- * It matters more now that the leaderboard exists: the accounts it lists are the
- * highest-volume ones on the venue — up to the ~10,000-fill ceiling of SPEC §4.3 — and
- * they are the first thing a new visitor clicks.
+ * It matters more now that the front page features traders: those accounts are busy
+ * ones — up to the ~10,000-fill ceiling of SPEC §4.3 — and they are the first thing a
+ * new visitor clicks.
  */
 
 export default function Loading() {

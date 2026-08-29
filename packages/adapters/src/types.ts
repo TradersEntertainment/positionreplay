@@ -256,18 +256,6 @@ export interface Adapter {
    * instruments come from an uploaded file, so there is no list to fetch.
    */
   listInstruments?(ctx?: AdapterContext): Promise<InstrumentListing[]>;
-
-  /**
-   * Optional: the venue's public leaderboard.
-   *
-   * For finding a trader worth watching without already knowing one. Every other way
-   * into this app starts from an address, which a first-time visitor does not have.
-   *
-   * Optional because most venues cannot answer it: a CSV is one person's own file, and
-   * Polymarket Perps publishes no ranking we have verified. A venue that gains one
-   * implements this and appears in the UI without anything else being edited.
-   */
-  listLeaderboard?(ctx?: AdapterContext): Promise<LeaderboardEntry[]>;
 }
 
 /** One tradable market, as little as a picker needs. */
@@ -276,61 +264,6 @@ export interface InstrumentListing {
   instrument: string;
   /** What a human calls it. */
   displayName: string;
-}
-
-/**
- * The windows a leaderboard ranks over.
- *
- * Ours, not a venue's. CLAUDE.md: "Adapters never leak. Venue-specific shapes stop at
- * the adapter boundary." Whatever a venue calls its windows is translated to these
- * inside the adapter, so the table above does not learn a vendor's vocabulary.
- */
-export type LeaderboardWindow = 'day' | 'week' | 'month' | 'allTime';
-
-export const LEADERBOARD_WINDOWS: readonly LeaderboardWindow[] = [
-  'day',
-  'week',
-  'month',
-  'allTime',
-];
-
-export interface LeaderboardWindowPerformance {
-  window: LeaderboardWindow;
-  /** The venue's own reported PnL for the window, in USD. */
-  pnl: number;
-  /**
-   * Return as a fraction, not a percentage.
-   *
-   * Optional because a venue may report PnL without it, and a percentage divided out
-   * of an account value we were not given would be a number we invented (CLAUDE.md).
-   */
-  roi?: number;
-}
-
-/**
- * One trader on a venue's public leaderboard, as little as a list needs.
- *
- * Every figure here is the *venue's* — account-level, over the whole account. This app's
- * own numbers are per-position and reconstructed from fills, and the two will not add
- * up. Anything rendering these has to say whose they are.
- */
-export interface LeaderboardEntry {
-  /** The account address, ready for `parseInput` — the whole point of the feature. */
-  address: string;
-  /** What the venue calls them, when it says. Never derived from the address. */
-  displayName?: string;
-  /** The venue's reported account value in USD. */
-  accountValue: number;
-  performance: LeaderboardWindowPerformance[];
-  /**
-   * This row is a vault or sub-account rather than a person's main account.
-   *
-   * SPEC §4.3's gotcha: "always query the main account address. Agent/API wallet
-   * addresses return empty or wrong data." A leaderboard that mixes them in would send
-   * some clicks to an empty position list, so a row that is one says so rather than
-   * being dropped — a ranking missing its best-known names looks broken too.
-   */
-  isVault?: boolean;
 }
 
 /** Thrown when a venue responds with a non-2xx status. */

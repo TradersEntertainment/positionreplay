@@ -21,7 +21,6 @@ import type {
   Adapter,
   AdapterWarning,
   InstrumentListing,
-  LeaderboardEntry,
   VenueLimitation,
 } from '@trade-replay/adapters';
 import { createSource, fixtureFromEnv, findWorkspaceRoot } from '@trade-replay/adapters/source';
@@ -458,81 +457,6 @@ export async function loadInstrumentList(venue: string): Promise<InstrumentListi
     csvStore: csvStore(),
   });
   return adapter.listInstruments(source.ctx);
-}
-
-/**
- * Venues whose leaderboard we can show.
- *
- * Derived from the adapters for the same reason `buildableVenues()` is: a venue nobody
- * can browse is not a choice, and one that gains a leaderboard later appears here
- * without anyone remembering to add it.
- */
-export function leaderboardVenues(): { id: string; label: string }[] {
-  return SUPPORTED_VENUES.filter((venue) => adapterFor(venue).listLeaderboard !== undefined).map(
-    (venue) => ({ id: venue, label: VENUE_LABELS[venue] ?? venue }),
-  );
-}
-
-export interface LeaderboardResult {
-  venue: string;
-  label: string;
-  entries: LeaderboardEntry[];
-  /** When we read these figures from the venue, for an "as of" line. */
-  fetchedAt: number;
-  warnings: AdapterWarning[];
-  provenanceWarning?: string;
-}
-
-/**
- * The most a caller may ask for in one request.
- *
- * A leaderboard payload is thousands of rows; an unclamped `?limit=` turns one request
- * into a several-megabyte response. The same reasoning as `/api/render`'s allowlisted
- * presets — the clamp lives where the number arrives, not where it is used.
- */
-export const LEADERBOARD_MAX = 100;
-
-/**
- * A venue's public leaderboard.
- *
- * Empty for a venue whose adapter cannot answer, matching `loadInstrumentList` — a
- * missing capability is not an error, it is a venue that does not publish a ranking.
- * A venue that *does* and then fails still throws, because an empty table would say
- * "nobody is trading" when the truth is "we could not ask" (SPEC §4.5's rule against a
- * silent "no positions").
- */
-export async function loadLeaderboard(
-  venue: string,
-  limit = LEADERBOARD_MAX,
-): Promise<LeaderboardResult> {
-  const label = VENUE_LABELS[venue] ?? venue;
-  const empty: LeaderboardResult = {
-    venue,
-    label,
-    entries: [],
-    fetchedAt: Date.now(),
-    warnings: [],
-  };
-
-  if (!isSupportedVenue(venue)) return empty;
-  const adapter = adapterFor(venue);
-  if (!adapter.listLeaderboard) return empty;
-
-  const source = createSource(fixtureFromEnv(), {
-    venue,
-    cache: cache(),
-    csvStore: csvStore(),
-  });
-
-  const entries = await adapter.listLeaderboard(source.ctx);
-  return {
-    venue,
-    label,
-    entries: entries.slice(0, Math.max(1, Math.min(limit, LEADERBOARD_MAX))),
-    fetchedAt: Date.now(),
-    warnings: source.warnings,
-    ...(source.provenanceWarning ? { provenanceWarning: source.provenanceWarning } : {}),
-  };
 }
 
 /**

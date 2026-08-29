@@ -28,6 +28,7 @@
     "verify:m7": "tsx scripts/verify-m7.ts",
     "verify:m8": "tsx scripts/verify-m8.ts",
     "verify:sound": "tsx scripts/verify-sound.ts",
+    "verify:featured": "tsx scripts/verify-featured.ts",
     "verify:build": "tsx scripts/verify-build.ts"
   },
   "devDependencies": {

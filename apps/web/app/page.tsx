@@ -13,8 +13,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { SUPPORTED_VENUES, VENUE_LABELS, VENUE_LIMITATIONS, isSupportedVenue } from '@trade-replay/adapters';
-import { LeaderboardPanel } from '@/components/LeaderboardPanel';
-import { leaderboardVenues } from '@/lib/data';
+import { FeaturedTraders } from '@/components/FeaturedTraders';
 import { MAX_UPLOAD_BYTES } from '../lib/csv';
 
 /** The CSV venue is reached by uploading a file, not by typing an account. */
@@ -24,8 +23,6 @@ export const dynamic = 'force-dynamic';
 
 const EXAMPLE = '0x393d0b87ed38fc779fd9611144ae649ba6082109';
 
-/** Enough names to pick from at a glance without turning the front page into a table. */
-const PANEL_ROWS = 8;
 
 export default async function Home({
   searchParams,
@@ -39,10 +36,6 @@ export default async function Home({
     redirect(`/a/${chosen}/${encodeURIComponent(address.trim())}`);
   }
 
-  // Derived, so a venue that gains a leaderboard shows up here without this page being
-  // edited — and one that loses it stops being advertised.
-  const board = leaderboardVenues()[0];
-
   return (
     <main className="mx-auto max-w-4xl p-8">
       <h1 className="text-2xl font-bold">Replay a trader&apos;s position</h1>
@@ -54,16 +47,13 @@ export default async function Home({
       {/* First, because it is the only thing here that works for someone who arrived
           knowing nobody. Every other entry point starts from something you have to
           already have: an address, a market and a memory, or a file. */}
-      {board ? (
-        <LeaderboardPanel
-          venue={board.id}
-          label={board.label}
-          venueTag={board.id === 'hyperliquid' ? 'HL' : board.id.slice(0, 2).toUpperCase()}
-          rows={PANEL_ROWS}
-        />
-      ) : null}
+      <FeaturedTraders />
 
-      <form method="GET" className="mt-8 flex gap-2">
+      {/* flex-wrap because this row does not fit a phone: the select, a 42-character
+          address placeholder and the button came to 516px against a 390px viewport, and
+          the whole page scrolled sideways. SPEC §13 asks only that mobile not be
+          broken, and a front page you have to swipe to read is broken. */}
+      <form method="GET" className="mt-8 flex flex-wrap gap-2">
         <select
           name="venue"
           // Remounted when the choice changes. React ignores a new `defaultValue` on an
@@ -87,7 +77,9 @@ export default async function Home({
           placeholder={EXAMPLE}
           aria-label="Wallet address"
           data-testid="address-input"
-          className="flex-1 border border-tr-line bg-tr-panel px-3 py-2 text-sm outline-none focus:border-tr-up"
+          // min-w-0 so the placeholder's intrinsic width cannot stop it shrinking; the
+          // basis keeps it on its own row on a phone and beside the select on a desktop.
+          className="min-w-0 flex-1 basis-64 border border-tr-line bg-tr-panel px-3 py-2 text-sm outline-none focus:border-tr-up"
         />
         <button
           type="submit"
@@ -114,9 +106,9 @@ export default async function Home({
       </p>
 
       {/* The builder, as a panel rather than a line of link text below two banners. It
-          used to be the only entry point that needed no address at all; the leaderboard
-          above is now the other one, and is the better answer for someone who has not
-          traded themselves. This one is for a trade you remember making. */}
+          used to be the only entry point that needed no address at all; the featured
+          traders above are now the other one, and the better answer for someone who has
+          not traded themselves. This one is for a trade you remember making. */}
       <div className="mt-8 border border-tr-up/40 bg-tr-up/5 p-4">
         <p className="text-sm font-bold">…or build a position by hand</p>
         <p className="mt-1 text-xs text-tr-dim">
