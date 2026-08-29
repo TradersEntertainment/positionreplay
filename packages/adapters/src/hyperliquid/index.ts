@@ -160,22 +160,40 @@ async function fetchFillSpan(
     startTime = next;
   }
 
-  // SPEC §4.3 / §11 case 9. The count reaching the venue's history ceiling is the
-  // reliable signal; an old wallet that simply traded little looks identical to a
-  // truncated one from the oldest-fill timestamp alone, so we key off the count.
-  if (raws.length >= HL_FILL_HISTORY_LIMIT) {
-    const oldest = raws.reduce((min, f) => Math.min(min, f.time), Number.POSITIVE_INFINITY);
-    warn(ctx, {
-      kind: 'fill_history_truncated',
-      message:
-        `Fill history unavailable before ${new Date(oldest).toISOString()} — Hyperliquid API limit ` +
-        `(~${HL_FILL_HISTORY_LIMIT} most recent fills). Positions opened earlier will have an ` +
-        `incorrect average entry.`,
-      detail: { oldestAvailable: oldest, fillCount: raws.length, requestedFrom: span.from },
-    });
-  }
-
   return raws.map((raw) => ({ id: `hl:${raw.tid}`, ts: raw.time, payload: raw }));
+}
+
+/**
+ * SPEC §4.3 / §11 case 9: say so when the venue could not give us the whole history.
+ *
+ * Derived from the ASSEMBLED record set rather than from a single fetched span, and that
+ * distinction is the whole point. `withFillCache` only fetches the missing edges once a
+ * cache is warm — a forward sync returns a handful of records — so a check inside the
+ * span fetch fired for the first visitor to a truncated account and for nobody after
+ * them. Everyone else got the same wrong average entry with no warning at all, which is
+ * exactly the failure §11 case 9 exists to prevent.
+ *
+ * The count reaching the venue's ceiling is the reliable signal; an old wallet that
+ * simply traded little looks identical to a truncated one from the oldest-fill timestamp
+ * alone, so we key off the count. A cache that has since grown past the ceiling is still
+ * truncated: whatever fell off before the first sync was never retrievable at any price.
+ */
+export function fillTruncationWarning(
+  records: readonly RawFillRecord[],
+  requestedFrom: number,
+  limit: number = HL_FILL_HISTORY_LIMIT,
+): AdapterWarning | null {
+  if (records.length < limit) return null;
+
+  const oldest = records.reduce((min, record) => Math.min(min, record.ts), Number.POSITIVE_INFINITY);
+  return {
+    kind: 'fill_history_truncated',
+    message:
+      `Fill history unavailable before ${new Date(oldest).toISOString()} — Hyperliquid API limit ` +
+      `(~${limit} most recent fills). Positions opened earlier will have an ` +
+      `incorrect average entry.`,
+    detail: { oldestAvailable: oldest, fillCount: records.length, requestedFrom },
+  };
 }
 
 /** All fills for this account, served through the cache when one is supplied. */
@@ -194,6 +212,9 @@ async function fetchFills(
     range: window,
     fetchSpan: (span) => fetchFillSpan(input, span, ctx),
   });
+
+  const truncated = fillTruncationWarning(records, window.from);
+  if (truncated) warn(ctx, truncated);
 
   // Cached payloads go back through Zod on the way out. A cache written by an older
   // build is just as untrusted as a venue response (SPEC §14).

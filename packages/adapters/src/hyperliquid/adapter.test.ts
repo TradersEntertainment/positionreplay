@@ -7,7 +7,15 @@ import { loadFixtureStore } from './fixtureStore.node.js';
 import { HL_FILL_HISTORY_LIMIT, hyperliquidAdapter } from './index.js';
 import { actionForDir } from './map.js';
 import { VenueContractError } from './schemas.js';
-import type { AdapterContext, AdapterWarning, FetchLike, HttpResponse } from '../types.js';
+import type {
+  AdapterContext,
+  AdapterWarning,
+  FetchLike,
+  FillCache,
+  FillSyncState,
+  HttpResponse,
+  RawFillRecord,
+} from '../types.js';
 import { InvalidInputError, SeriesUnavailableError } from '../types.js';
 import { createUnlimitedLimiter } from '../limiter.js';
 
@@ -192,6 +200,57 @@ describe('fetchFills pagination (SPEC §4.3)', () => {
     const truncation = warnings.find((w) => w.kind === 'fill_history_truncated');
     expect(truncation).toBeDefined();
     expect(truncation!.message).toMatch(/Fill history unavailable before/);
+  });
+
+  it('still warns on a warm cache, when nothing new was fetched', async () => {
+    // The regression this exists for: the check used to live inside the span fetch, and
+    // `withFillCache` only fetches the missing edges once a cache is warm. So the first
+    // visitor to a truncated account saw the warning and every visitor after them saw
+    // the same wrong average entry with none — which is exactly what §11 case 9 is for.
+    // The leaderboard makes the warm path the common one: everybody clicks the same
+    // handful of traders.
+    const stored: RawFillRecord[] = [];
+    let state: FillSyncState | null = null;
+    const cache: FillCache = {
+      readState: async () => state,
+      read: async () => stored,
+      write: async (_venue, _address, records, next) => {
+        stored.push(...records);
+        state = next;
+      },
+    };
+
+    let cursor = 0;
+    const fetch: FetchLike = async (_url, init) => {
+      const body = JSON.parse(init.body ?? '{}') as Record<string, unknown>;
+      const start = Number(body['startTime']);
+      if (cursor >= HL_FILL_HISTORY_LIMIT) return jsonResponse([]);
+      const page = Array.from({ length: 2000 }, (_, i) => stubFill(cursor + i, start + i));
+      cursor += 2000;
+      return jsonResponse(page);
+    };
+
+    const truncationsFor = async (): Promise<AdapterWarning[]> => {
+      const warnings: AdapterWarning[] = [];
+      await hyperliquidAdapter.fetchFills(
+        { venue: 'hyperliquid', address: ADDRESS },
+        { from: 0, to: Number.MAX_SAFE_INTEGER },
+        {
+          fetch,
+          sleep: async () => undefined,
+          limiter: createUnlimitedLimiter(),
+          fillCache: cache,
+          onWarning: (w) => warnings.push(w),
+        },
+      );
+      return warnings.filter((w) => w.kind === 'fill_history_truncated');
+    };
+
+    expect(await truncationsFor()).toHaveLength(1);
+    // Second call: the cache is warm and the fetch is exhausted, so no span reaches the
+    // ceiling — but the assembled set still does, and the history is still truncated.
+    expect(stored.length).toBeGreaterThanOrEqual(HL_FILL_HISTORY_LIMIT);
+    expect(await truncationsFor()).toHaveLength(1);
   });
 
   it('does NOT cry truncation for a wallet that simply traded little', async () => {
