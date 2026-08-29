@@ -13,6 +13,8 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { SUPPORTED_VENUES, VENUE_LABELS, VENUE_LIMITATIONS, isSupportedVenue } from '@trade-replay/adapters';
+import { LeaderboardPanel } from '@/components/LeaderboardPanel';
+import { leaderboardVenues } from '@/lib/data';
 import { MAX_UPLOAD_BYTES } from '../lib/csv';
 
 /** The CSV venue is reached by uploading a file, not by typing an account. */
@@ -21,6 +23,9 @@ const WALLET_VENUES = SUPPORTED_VENUES.filter((v) => v !== 'csv');
 export const dynamic = 'force-dynamic';
 
 const EXAMPLE = '0x393d0b87ed38fc779fd9611144ae649ba6082109';
+
+/** Enough names to pick from at a glance without turning the front page into a table. */
+const PANEL_ROWS = 8;
 
 export default async function Home({
   searchParams,
@@ -34,15 +39,31 @@ export default async function Home({
     redirect(`/a/${chosen}/${encodeURIComponent(address.trim())}`);
   }
 
+  // Derived, so a venue that gains a leaderboard shows up here without this page being
+  // edited — and one that loses it stops being advertised.
+  const board = leaderboardVenues()[0];
+
   return (
     <main className="mx-auto max-w-4xl p-8">
       <h1 className="text-2xl font-bold">Replay a trader&apos;s position</h1>
       <p className="mt-1 text-sm text-tr-dim">
-        From open to close, as a chart that plays. Paste an address, or upload your own
-        fills.
+        From open to close, as a chart that plays. Pick a trader below, paste an address, or
+        upload your own fills.
       </p>
 
-      <form method="GET" className="mt-6 flex gap-2">
+      {/* First, because it is the only thing here that works for someone who arrived
+          knowing nobody. Every other entry point starts from something you have to
+          already have: an address, a market and a memory, or a file. */}
+      {board ? (
+        <LeaderboardPanel
+          venue={board.id}
+          label={board.label}
+          venueTag={board.id === 'hyperliquid' ? 'HL' : board.id.slice(0, 2).toUpperCase()}
+          rows={PANEL_ROWS}
+        />
+      ) : null}
+
+      <form method="GET" className="mt-8 flex gap-2">
         <select
           name="venue"
           // Remounted when the choice changes. React ignores a new `defaultValue` on an
@@ -93,8 +114,9 @@ export default async function Home({
       </p>
 
       {/* The builder, as a panel rather than a line of link text below two banners. It
-          is the only entry point that needs no address at all, which makes it the one
-          most people can actually use. */}
+          used to be the only entry point that needed no address at all; the leaderboard
+          above is now the other one, and is the better answer for someone who has not
+          traded themselves. This one is for a trade you remember making. */}
       <div className="mt-8 border border-tr-up/40 bg-tr-up/5 p-4">
         <p className="text-sm font-bold">…or build a position by hand</p>
         <p className="mt-1 text-xs text-tr-dim">
@@ -167,12 +189,6 @@ export default async function Home({
         })}
       </ul>
 
-      <p className="mt-8 text-sm text-tr-dim">
-        Try{' '}
-        <Link href={`/a/hyperliquid/${EXAMPLE}`} className="underline hover:text-tr-text">
-          {EXAMPLE}
-        </Link>
-      </p>
     </main>
   );
 }
