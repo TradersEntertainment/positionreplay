@@ -28,8 +28,19 @@ import { midiToHz, type Note } from '@trade-replay/renderer';
  */
 const MAX_NOTES_PER_TICK = 3;
 
-/** Master level. Well under 1: several notes ring at once and they sum. */
-const MASTER_GAIN = 0.22;
+/**
+ * Master level.
+ *
+ * Raised from 0.22 after doing the arithmetic on a single note: velocity averages around
+ * 0.5 and the voice peak was 0.4 of that, so one note landed near -30 dBFS. The exported
+ * file measured -14.5 dB and looked fine because notes overlap there — but a lone piano
+ * note at -30 dBFS on laptop speakers at half volume is a whisper, which is a perfectly
+ * good explanation for "the site has no sound".
+ *
+ * Headroom for the overlap comes from the compressor below rather than from keeping
+ * everything quiet.
+ */
+const MASTER_GAIN = 0.5;
 
 export interface ReplayAudio {
   /**
@@ -44,6 +55,27 @@ export interface ReplayAudio {
   setMuted(muted: boolean): void;
   /** Browsers require a user gesture before audio starts; call this from the button. */
   resume(): Promise<void>;
+  /**
+   * What the audio context is actually doing.
+   *
+   * Exposed because "suspended" and "playing quietly" look identical from outside, and
+   * that ambiguity is how a silent player shipped: the page said "Sound on" while the
+   * browser had never started the context. The UI reads this to say what is true, and
+   * the browser test reads it to assert the thing it could not before.
+   *
+   * `AudioContextState` rather than a hand-written union: Safari adds `'interrupted'`
+   * when a call or another app takes the audio session, and a narrower type here would
+   * mean pretending that state does not exist.
+   */
+  state(): AudioContextState;
+  /**
+   * Notes struck since this graph was created.
+   *
+   * The only direct evidence that sound was produced. Inferring it from the exported
+   * file does not work — the export drives its own graph and can carry audio while the
+   * live player is mute.
+   */
+  strikes(): number;
   /**
    * An audio track carrying this same output, for MediaRecorder.
    *
@@ -85,17 +117,35 @@ export function createReplayAudio(
 
   const master = ctx.createGain();
   master.gain.value = MASTER_GAIN;
-  if (!options.silent) master.connect(ctx.destination);
+
+  /**
+   * A limiter, so the notes can be loud without the overlaps clipping.
+   *
+   * Up to three notes ring at once and their tails sum. Without this, a level loud
+   * enough for a single note distorts on a run of them; with it, the loud passages are
+   * held down and the quiet ones stay audible. It sits after the master gain so both the
+   * speakers and the recorder get the same signal.
+   */
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -10;
+  limiter.knee.value = 6;
+  limiter.ratio.value = 12;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.15;
+  master.connect(limiter);
+
+  if (!options.silent) limiter.connect(ctx.destination);
 
   // A second destination so the recorder hears exactly what the speakers do, rather
   // than a separately rendered copy that could drift out of step with it.
   const capture =
     typeof ctx.createMediaStreamDestination === 'function' ? ctx.createMediaStreamDestination() : null;
-  if (capture) master.connect(capture);
+  if (capture) limiter.connect(capture);
 
   let muted = false;
   let cursor = 0;
   let lastIndex = -1;
+  let struck = 0;
 
   /** First note at or after `frame`. The list is sorted, so this is a plain search. */
   function cursorFor(frame: number): number {
@@ -146,7 +196,8 @@ export function createReplayAudio(
       oscillators.push(osc);
     }
 
-    const peak = note.velocity * (bass ? 0.55 : 0.4);
+    // Raised alongside MASTER_GAIN; the limiter above absorbs the overlaps.
+    const peak = note.velocity * (bass ? 0.9 : 0.7);
     const attack = 0.004;
     const end = at + note.duration;
 
@@ -181,10 +232,20 @@ export function createReplayAudio(
         return;
       }
       lastIndex = index;
-      if (muted || ctx.state !== 'running') {
+
+      // Muted means the notes went by; the cursor moves so unmuting starts from here
+      // rather than replaying everything that was missed.
+      if (muted) {
         cursor = cursorFor(index + 1);
         return;
       }
+
+      // Suspended is different, and getting it wrong is why the player was silent. The
+      // browser has not started the context yet — `resume()` is async and a few frames
+      // pass before it takes effect. Advancing the cursor here would discard the notes
+      // in that gap, which are the opening of the piece. Hold position instead: they
+      // sound a beat late, which nobody notices, rather than never.
+      if (ctx.state !== 'running') return;
 
       const due: Note[] = [];
       while (cursor < notes.length && notes[cursor]!.frame <= index) {
@@ -196,6 +257,7 @@ export function createReplayAudio(
       const now = ctx.currentTime;
       for (const note of due.slice(-MAX_NOTES_PER_TICK)) {
         strike(note, now);
+        struck++;
       }
     },
 
@@ -212,6 +274,14 @@ export function createReplayAudio(
 
     async resume(): Promise<void> {
       if (ctx.state === 'suspended') await ctx.resume();
+    },
+
+    state(): AudioContextState {
+      return ctx.state;
+    },
+
+    strikes(): number {
+      return struck;
     },
 
     captureTrack(): MediaStreamTrack | null {

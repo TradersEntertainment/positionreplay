@@ -101,6 +101,7 @@ export function Player(props: PlayerProps) {
     [episode, series, frames],
   );
   const playingRef = useRef(false);
+  const audioStateRef = useRef<AudioContextState>('suspended');
 
   /**
    * The soundtrack, derived from the same energy track the chart's effects use — so the
@@ -114,10 +115,65 @@ export function Player(props: PlayerProps) {
 
   const audioRef = useRef<ReplayAudio | null>(null);
   const [muted, setMuted] = useState(false);
+  /**
+   * Whether the browser has actually started the audio context.
+   *
+   * Tracked because "suspended" and "playing quietly" are indistinguishable from the
+   * outside, and that ambiguity is exactly how a silent player shipped: the button said
+   * "Sound on" while the browser had never let a note through. Polled from the render
+   * loop, which is already running, rather than by a timer of its own.
+   */
+  const [audioState, setAudioState] = useState<AudioContextState>('suspended');
 
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [climax, setClimax] = useState(false);
+
+  /**
+   * Unblock audio on the first interaction with the page, whatever it was.
+   *
+   * Browsers start an AudioContext suspended and only let a *user gesture* resume it.
+   * Hanging that solely off the Play button is fragile: someone who drags the scrubber,
+   * hits space, or clicks the canvas first has already spent their gesture, and a
+   * `resume()` that arrives outside one can be refused. Listening once for any pointer
+   * or key removes the whole class.
+   *
+   * `once: true` — after the context is running there is nothing left to do.
+   */
+  useEffect(() => {
+    const unblock = (): void => {
+      void audioRef.current?.resume().then(() => {
+        const state = audioRef.current?.state();
+        if (state) {
+          audioStateRef.current = state;
+          setAudioState(state);
+        }
+      });
+    };
+
+    document.addEventListener('pointerdown', unblock, { once: true });
+    document.addEventListener('keydown', unblock, { once: true });
+    return () => {
+      document.removeEventListener('pointerdown', unblock);
+      document.removeEventListener('keydown', unblock);
+    };
+  }, []);
+
+  // A window handle onto the live audio graph, for `verify:sound`.
+  //
+  // The export path drives its own graph, so a file with sound proves nothing about the
+  // player — that is precisely the gap that let a silent player pass verification. This
+  // is the only way to assert from outside that the player itself made a noise.
+  useEffect(() => {
+    const w = window as unknown as { __replayAudio?: () => { state: string; strikes: number } };
+    w.__replayAudio = () => ({
+      state: audioRef.current?.state() ?? 'closed',
+      strikes: audioRef.current?.strikes() ?? 0,
+    });
+    return () => {
+      delete w.__replayAudio;
+    };
+  }, []);
 
   const draw = useCallback(
     (index: number) => {
@@ -242,6 +298,12 @@ export function Player(props: PlayerProps) {
       // Driven by the frame index, not by elapsed time, so the melody stays locked to
       // the chart at every speed and through a scrub.
       audioRef.current?.advanceTo(index);
+      // Cheap: a string compare against a ref, and the setter is a no-op when unchanged.
+      const state = audioRef.current?.state();
+      if (state && state !== audioStateRef.current) {
+        audioStateRef.current = state;
+        setAudioState(state);
+      }
 
       // Playback stops itself at the final frame; reflect that in the button without
       // touching React state on every tick.
@@ -268,7 +330,15 @@ export function Player(props: PlayerProps) {
     draw(clock.state.frameIndex);
     // The gesture browsers require. Pressing play is the moment sound is expected, and
     // no other control in this player is one a user would be surprised to hear.
-    if (clock.state.playing) void audioRef.current?.resume();
+    if (clock.state.playing) {
+      void audioRef.current?.resume().then(() => {
+        const state = audioRef.current?.state();
+        if (state) {
+          audioStateRef.current = state;
+          setAudioState(state);
+        }
+      });
+    }
   }, [clock, syncPlaying, draw]);
 
   const toggleMute = useCallback(() => {
@@ -415,11 +485,27 @@ export function Player(props: PlayerProps) {
           onClick={toggleMute}
           data-testid="mute-toggle"
           aria-pressed={muted}
-          title={muted ? 'Sound off' : 'Sound on — a piano line that follows the PnL'}
-          className="border border-tr-line bg-tr-panel px-3 py-1.5 hover:border-tr-up"
+          title={
+            muted
+              ? 'Muted — click to turn the piano back on'
+              : 'A piano line that follows the PnL. Click to mute.'
+          }
+          data-audio-state={audioState}
+          className={`border bg-tr-panel px-3 py-1.5 ${
+            muted ? 'border-tr-line text-tr-dim' : 'border-tr-up text-tr-up'
+          }`}
         >
           {muted ? 'Sound off' : 'Sound on'}
         </button>
+
+        {/* Said out loud rather than left to silence. A context the browser has not
+            started looks exactly like one that is working and quiet, and the whole
+            reason the player shipped mute is that nothing here distinguished them. */}
+        {!muted && audioState !== 'running' && playing ? (
+          <span className="text-xs text-tr-notice" data-testid="audio-blocked">
+            Your browser has not started audio — click Sound on, then Play again.
+          </span>
+        ) : null}
 
         <span ref={readoutRef} data-testid="frame-readout" className="w-52 text-tr-dim">
           1 / {frames.length}

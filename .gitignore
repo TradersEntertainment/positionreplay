@@ -23,6 +23,17 @@ out/
 .DS_Store
 .data/
 
+# screenshots and clips the verify:* scripts write to the repo root for eyeballing
+build-*.png
+last-*.png
+m[0-9]-*.png
+m[0-9]-export.*
+sound-*.png
+sound-export.*
+replay.webm
+replay.mp4
+replay-again.mp4
+
 # Copied from node_modules at build time by apps/web/scripts/copy-gif-worker.mjs
 apps/web/public/gif.worker.js
 apps/worker/dist/

@@ -183,9 +183,105 @@ function writeShot(buffer: Buffer, name: string): void {
   writeFileSync(join(SHOTS, name), buffer);
 }
 
+/**
+ * The player, in a browser with no autoplay override.
+ *
+ * This is the run that matters, and its absence is why a silent player shipped. The
+ * other browser below is launched with `--autoplay-policy=no-user-gesture-required`,
+ * which starts every AudioContext already `running` — suppressing exactly the mechanism
+ * that was failing. Its checks (an Opus track in the exported file) were true and
+ * irrelevant: the export drives its own graph and can carry audio while the live player
+ * is mute.
+ *
+ * So this one presses Play like a person does and asks the page itself what happened.
+ */
+async function runRealBrowser(browser: Browser): Promise<void> {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openPlayer(page);
+
+  const before = await audioProbe(page);
+  record(
+    'the audio graph exists before anything is pressed',
+    before !== null,
+    before === null ? 'no graph' : `state ${before.state}, ${before.strikes} strikes`,
+  );
+
+  // A real click, which is the gesture browsers require.
+  await page.getByTestId('play-toggle').click();
+
+  // The context resumes asynchronously; a person would wait about this long too.
+  await page
+    .waitForFunction(
+      () =>
+        (window as unknown as { __replayAudio?: () => { state: string } })
+          .__replayAudio?.().state === 'running',
+      undefined,
+      { timeout: 8_000 },
+    )
+    .catch(() => undefined);
+
+  const running = await audioProbe(page);
+  record(
+    'pressing Play actually starts the audio context',
+    running?.state === 'running',
+    `state ${running?.state ?? 'unknown'}`,
+  );
+
+  // Let the replay play far enough to cross several notes.
+  await page.waitForTimeout(2500);
+  const played = await audioProbe(page);
+  record(
+    'the player itself strikes notes, not just the exporter',
+    (played?.strikes ?? 0) > 3,
+    `${played?.strikes ?? 0} notes struck`,
+  );
+
+  record(
+    'nothing claims audio is blocked when it is not',
+    (await page.getByTestId('audio-blocked').count()) === 0,
+    'no blocked notice while running',
+  );
+
+  // Muting has to actually stop it, not just relabel the button.
+  //
+  // The count is read *after* the click, not before: the render loop keeps striking
+  // while Playwright moves the mouse and dispatches, so a before/after comparison
+  // straddling the click measures the gap rather than the mute. The invariant is that
+  // the count stops growing once muted.
+  await page.getByTestId('mute-toggle').click();
+  await page.waitForTimeout(300);
+  const atMute = (await audioProbe(page))?.strikes ?? 0;
+  await page.waitForTimeout(1500);
+  const afterMute = (await audioProbe(page))?.strikes ?? 0;
+  record(
+    'muting stops the notes',
+    afterMute === atMute,
+    `${atMute} at mute, ${afterMute} a second and a half later`,
+  );
+
+  await page.close();
+}
+
+/** What the live graph reports, or null when the player has not mounted one. */
+async function audioProbe(page: Page): Promise<{ state: string; strikes: number } | null> {
+  return page.evaluate(
+    () =>
+      (window as unknown as { __replayAudio?: () => { state: string; strikes: number } })
+        .__replayAudio?.() ?? null,
+  );
+}
+
 async function main(): Promise<number> {
   console.log('Venue header and replay audio');
   console.log(`  target ${BASE}\n`);
+
+  // No flags: this is a browser behaving like the user's.
+  const real = await chromium.launch({ executablePath: CHROME });
+  try {
+    await runRealBrowser(real);
+  } finally {
+    await real.close();
+  }
 
   const browser = await chromium.launch({
     executablePath: CHROME,
