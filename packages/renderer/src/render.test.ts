@@ -36,6 +36,8 @@ function recordingContext(): { ctx: Canvas2D; calls: Call[] } {
     textBaseline: 'alphabetic',
     save: record('save'),
     restore: record('restore'),
+    translate: record('translate'),
+    scale: record('scale'),
     beginPath: record('beginPath'),
     closePath: record('closePath'),
     moveTo: record('moveTo'),

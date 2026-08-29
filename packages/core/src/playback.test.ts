@@ -231,6 +231,34 @@ describe('climax easing (SPEC §6.3)', () => {
     expect(eased.state.frameIndex).toBe(plain.state.frameIndex);
   });
 
+  it('measures the tail against the trade, not against the ending hold', () => {
+    // buildFrames appends held frames for the closing card. Counting them as part of
+    // the replay would push the climax past the exit — the position would close at
+    // full speed and the card would crawl.
+    const held = createPlaybackClock({ frameCount: 136, climax: true, holdFrames: 36 });
+    const plain = createPlaybackClock({ frameCount: 136, climax: false, holdFrames: 36 });
+    const start = Math.floor(100 * (1 - CLIMAX_TAIL_RATIO));
+
+    for (const c of [held, plain]) {
+      c.seek(start);
+      c.play();
+      run(c, 1_000);
+    }
+    expect(held.state.frameIndex).toBeLessThan(plain.state.frameIndex);
+  });
+
+  it('plays the ending hold at full speed', () => {
+    // The card is a fixed second and a half. At 0.3x it would be five.
+    const held = createPlaybackClock({ frameCount: 136, climax: true, holdFrames: 36 });
+    const plain = createPlaybackClock({ frameCount: 136, climax: false, holdFrames: 36 });
+    for (const c of [held, plain]) {
+      c.seek(100);
+      c.play();
+      run(c, 500);
+    }
+    expect(held.state.frameIndex).toBe(plain.state.frameIndex);
+  });
+
   it('is toggleable at runtime', () => {
     const c = clock(100, false);
     expect(c.state.climax).toBe(false);

@@ -13,4 +13,6 @@ export * from './render.js';
 export * from './sequence.js';
 export * from './effects.js';
 export * from './score.js';
+export * from './outro.js';
+export * from './version.js';
 export { FADE_FRAMES } from './layers/markers.js';

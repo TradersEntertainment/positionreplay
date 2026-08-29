@@ -12,6 +12,7 @@
 
 import {
   buildFrames,
+  OUTRO_HOLD_FRAMES,
   createPlaybackClock,
   type Frame,
   type PlaybackClock,
@@ -87,7 +88,13 @@ export function Player(props: PlayerProps) {
   // One clock for the component's life; the frame count is updated in place when the
   // interval changes, rather than silently constructing a second clock.
   const clockRef = useRef<PlaybackClock | null>(null);
-  clockRef.current ??= createPlaybackClock({ frameCount: frames.length });
+  // holdFrames so SPEC §6.3's climax stays over the trade: buildFrames appends the
+  // closing card's frames, and slowing those to 0.3x would stretch a second and a half
+  // into five while the exit itself played at full speed.
+  clockRef.current ??= createPlaybackClock({
+    frameCount: frames.length,
+    holdFrames: OUTRO_HOLD_FRAMES,
+  });
   const clock = clockRef.current;
 
   /**
@@ -235,7 +242,7 @@ export function Player(props: PlayerProps) {
 
   // A new series means a new timeline: adopt the frame count and redraw from scratch.
   useEffect(() => {
-    clock.setFrameCount(frames.length);
+    clock.setFrameCount(frames.length, OUTRO_HOLD_FRAMES);
     renderer.reset();
     draw(clock.state.frameIndex);
   }, [frames, clock, draw, renderer]);

@@ -12,6 +12,7 @@
  */
 
 import { and, asc, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { RENDER_VERSION } from '@trade-replay/renderer';
 import type { CacheDb } from './db.js';
 import { renderJobs } from './schema.js';
 
@@ -84,6 +85,11 @@ export interface RenderJobStore {
 /** The identity of a request. Same key, same video — so the same job. */
 export function requestKeyFor(spec: RenderSpec): string {
   return [
+    // What the renderer draws is part of the request, not just what is being drawn.
+    // Without this an MP4 encoded by an older version of the renderer answers every
+    // later request for the same replay forever — the viewer watches a preview with
+    // the new ending and downloads a file with the old one.
+    `v${RENDER_VERSION}`,
     spec.replayId,
     spec.width,
     spec.height,

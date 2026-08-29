@@ -20,6 +20,9 @@ importers:
       '@trade-replay/core':
         specifier: workspace:*
         version: link:packages/core
+      '@trade-replay/renderer':
+        specifier: workspace:*
+        version: link:packages/renderer
       '@types/node':
         specifier: ^22.19.0
         version: 22.20.1
@@ -166,6 +169,9 @@ importers:
       '@trade-replay/core':
         specifier: workspace:*
         version: link:../core
+      '@trade-replay/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       better-sqlite3:
         specifier: ^12.4.1
         version: 12.11.1

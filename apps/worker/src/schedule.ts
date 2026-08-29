@@ -21,6 +21,12 @@ export interface ScheduleOptions {
   slowFinish: boolean;
   /** Playback speed the preview ran at. SPEC §6.3: framesPerSecond = 24 * speed. */
   speed?: number;
+  /**
+   * Trailing frames that are the closing card rather than the trade
+   * (core's `OUTRO_HOLD_FRAMES`). They sit outside the climax, exactly as in the
+   * player's clock: the slow-down belongs to the exit, and the card is a fixed length.
+   */
+  holdFrames?: number;
 }
 
 export interface Schedule {
@@ -36,9 +42,10 @@ export interface Schedule {
  * Exported because the same boundary decides the player's readout, and two
  * implementations of "the last ~10%" would eventually disagree by a frame.
  */
-export function climaxStart(frameCount: number, slowFinish: boolean): number {
-  if (!slowFinish || frameCount === 0) return frameCount;
-  return Math.max(0, frameCount - Math.max(1, Math.round(frameCount * CLIMAX_TAIL_RATIO)));
+export function climaxStart(frameCount: number, slowFinish: boolean, holdFrames = 0): number {
+  const traded = Math.max(0, frameCount - Math.max(0, holdFrames));
+  if (!slowFinish || traded === 0) return traded;
+  return Math.max(0, traded - Math.max(1, Math.round(traded * CLIMAX_TAIL_RATIO)));
 }
 
 export function buildSchedule(options: ScheduleOptions): Schedule {
@@ -49,10 +56,14 @@ export function buildSchedule(options: ScheduleOptions): Schedule {
   if (fps <= 0) throw new Error(`fps must be positive, got ${fps}`);
   if (speed <= 0) throw new Error(`speed must be positive, got ${speed}`);
 
-  const start = climaxStart(frameCount, slowFinish);
+  const hold = Math.max(0, options.holdFrames ?? 0);
+  const traded = Math.max(0, frameCount - hold);
+  const start = climaxStart(frameCount, slowFinish, hold);
 
   const durations = Array.from({ length: frameCount }, (_, i) => {
-    const effectiveSpeed = i >= start ? speed * CLIMAX_SPEED : speed;
+    // `i < traded` keeps the held frames out of it: the card is a fixed second and a
+    // half, and at 0.3x it would run for five.
+    const effectiveSpeed = i >= start && i < traded ? speed * CLIMAX_SPEED : speed;
     // One timeline frame lasts 1 / (24 * speed) seconds, exactly as in the player.
     const seconds = 1 / (BASE_FPS * effectiveSpeed);
     // Not rounded to the video's frame grid: rounding each frame independently

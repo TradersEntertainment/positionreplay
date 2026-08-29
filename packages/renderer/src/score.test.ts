@@ -2,6 +2,7 @@ import { buildEpisodes } from '@trade-replay/core';
 import type { Fill, Frame } from '@trade-replay/core';
 import { describe, expect, it } from 'vitest';
 import { computeEnergyTrack } from './effects.js';
+import { outroStart } from './outro.js';
 import {
   BAR_NOTE_FLOOR,
   BAR_NOTE_GAP,
@@ -117,6 +118,24 @@ describe('composeScore', () => {
     }));
     expect(composeScore(late, computeEnergyTrack(late), episode).filter((n) => n.voice === 'bass'))
       .toHaveLength(0);
+  });
+
+  it('lands one low note on the frame the chart starts pulling back', () => {
+    const notes = scoreOf(rising).filter((n) => n.voice === 'end');
+    expect(notes).toHaveLength(1);
+    // Timed from outro.ts, not from a constant here: the note and the pull-back are the
+    // same moment read twice, and a second constant is a second thing to drift.
+    expect(notes[0]!.frame).toBe(outroStart(rising.length));
+    // Low, and longer than any fill's marker — a resolution, not another event.
+    expect(notes[0]!.midi).toBeLessThan(48);
+    expect(notes[0]!.duration).toBeGreaterThan(2.4);
+  });
+
+  it('has no closing note on a replay too short for an ending', () => {
+    const brief = framesOf([0, 10, 20, 30]);
+    expect(outroStart(brief.length)).toBe(-1);
+    expect(composeScore(brief, computeEnergyTrack(brief), episode).some((n) => n.voice === 'end'))
+      .toBe(false);
   });
 
   it('is sorted by frame, so a player can walk it once', () => {

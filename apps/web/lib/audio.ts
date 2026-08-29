@@ -161,7 +161,9 @@ export function createReplayAudio(
 
   function strike(note: Note, at: number): void {
     const hz = midiToHz(note.midi);
-    const bass = note.voice === 'bass';
+    // The closing note is a bass note in everything but name: same register, same
+    // struck-string partials. Only the score cares that they are different events.
+    const bass = note.voice !== 'lead';
 
     const voice = ctx.createGain();
     voice.gain.value = 0;

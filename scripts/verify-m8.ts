@@ -191,15 +191,25 @@ async function run(browser: Browser): Promise<void> {
 
   // The last frame: both files end on it and both hold it, so this is the one moment
   // where their timings cannot disagree.
+  //
+  // Decoded in full rather than seeked to with -sseof. The WebM's audio outlives its
+  // video — the exporter holds the final canvas for TAIL_MS after the last paint, and
+  // a canvas that is not changing emits no new frames while the microphone-less audio
+  // track keeps running — so a seek relative to the container's end lands past the
+  // last picture and writes nothing at all, silently. `-update 1` overwrites the same
+  // file for every frame, so what survives is the last one, exactly.
   for (const [file, out] of [
     [mp4, 'last-server.png'],
     [webm, 'last-browser.png'],
   ] as const) {
     execFileSync(
       FFMPEG,
-      ['-hide_banner', '-loglevel', 'error', '-y', '-sseof', '-0.15', '-i', file, '-update', '1', '-q:v', '2', join(dir, out)],
+      ['-hide_banner', '-loglevel', 'error', '-y', '-i', file, '-an', '-update', '1', '-q:v', '2', join(dir, out)],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     );
+    if (!existsSync(join(dir, out))) {
+      throw new Error(`ffmpeg decoded no video frame from ${file}`);
+    }
   }
 
   writeFileSync(join(SHOTS, 'm8-02-server-frame.png'), readFileSync(join(dir, 'last-server.png')));

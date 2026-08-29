@@ -23,6 +23,16 @@ export interface Canvas2D {
   save(): void;
   restore(): void;
 
+  /**
+   * Both hosts have these; only the outro uses them, and only inside a save/restore.
+   *
+   * Adding them to this interface is what lets the ending pull the chart back without
+   * every layer needing to know about it — the transform is applied once around the
+   * existing draw order.
+   */
+  translate(x: number, y: number): void;
+  scale(x: number, y: number): void;
+
   beginPath(): void;
   closePath(): void;
   moveTo(x: number, y: number): void;
@@ -134,6 +144,14 @@ export interface RenderLayout {
    * every caller that does not opt in gets the plain chart.
    */
   energy?: FrameEnergy;
+  /**
+   * How far into the closing card this frame is, 0..1. See outro.ts.
+   *
+   * Passed in for the same reason `energy` is: it depends on the length of the whole
+   * replay, which `renderFrame` deliberately does not know. Absent means the frame is
+   * drawn as an ordinary one, which is what every caller that does not opt in gets.
+   */
+  outro?: number;
 }
 
 /** Pixel geometry derived entirely from width/height — no hardcoded positions. */

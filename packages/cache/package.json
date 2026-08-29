@@ -13,6 +13,7 @@
   "dependencies": {
     "@trade-replay/adapters": "workspace:*",
     "@trade-replay/core": "workspace:*",
+    "@trade-replay/renderer": "workspace:*",
     "better-sqlite3": "^12.4.1",
     "drizzle-orm": "^0.45.2"
   },

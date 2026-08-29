@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { axisDate, compactSize, compactUsd, hudDate, niceTicks, priceLabel, shortAddress, signedUsd, usd } from './helpers.js';
+import { axisDate, compactSize, compactUsd, holdingTime, hudDate, niceTicks, priceLabel, shortAddress, signedUsd, usd } from './helpers.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -100,5 +100,23 @@ describe('shortAddress', () => {
 
   it('leaves an already-short label alone', () => {
     expect(shortAddress('trader.eth')).toBe('trader.eth');
+  });
+});
+
+describe('holdingTime', () => {
+  it('drops to two units, coarsest first', () => {
+    expect(holdingTime(65 * 60_000)).toBe('1H 05M');
+    expect(holdingTime((2 * 24 * 60 + 3 * 60 + 41) * 60_000)).toBe('2D 03H');
+    expect(holdingTime(90_000)).toBe('1M 30S');
+  });
+
+  it('says seconds when that is all there is', () => {
+    // A scalp closed inside a minute held for a real, sayable length of time.
+    expect(holdingTime(12_000)).toBe('12S');
+    expect(holdingTime(0)).toBe('0S');
+  });
+
+  it('does not go negative on a position with no measurable duration', () => {
+    expect(holdingTime(-5_000)).toBe('0S');
   });
 });

@@ -142,13 +142,46 @@ function readSeries(series: PriceSeries): { times: number[]; marks: number[] } {
 }
 
 /**
- * Build the full frame array for an episode. SPEC §6.2.
+ * Frames held on the final state after the last bar, for the closing card to play over.
+ *
+ * A second and a half at SPEC §6.3's 24fps. Without them the ending would have to be
+ * drawn over the last bars of the trade — which is exactly where the position closes,
+ * and where SPEC §6.3's climax slows down so the viewer can watch it happen. Dimming
+ * those frames would hide the one moment the whole replay builds to.
+ *
+ * The renderer reads this constant to know which frames are the ending
+ * (packages/renderer/src/outro.ts). One number, so the picture and the timeline cannot
+ * disagree about where the trade stops and the card starts.
+ */
+export const OUTRO_HOLD_FRAMES = 36;
+
+export interface BuildFramesOptions {
+  /**
+   * Frames to hold the final state for. Defaults to `OUTRO_HOLD_FRAMES`.
+   *
+   * Zero gives the strict SPEC §6.2 array — one frame per bar and nothing else — which
+   * is what the fold's own tests assert against.
+   */
+  hold?: number;
+}
+
+/**
+ * Build the full frame array for an episode. SPEC §6.2, plus the ending hold.
  *
  * Each frame `i` is the position state as of `series[i]`. The state is replayed from
  * `episode.steps` rather than re-folding the fills, so the frames cannot drift from
  * the reconstruction in episodes.ts.
+ *
+ * After the last bar come `hold` copies of the final frame; see `OUTRO_HOLD_FRAMES`.
+ * They are appended here rather than by each player, exporter and render worker in
+ * turn, because a replay that ends one way on screen and another way in the file is
+ * the failure this whole module exists to prevent.
  */
-export function buildFrames(episode: PositionEpisode, series: PriceSeries): Frame[] {
+export function buildFrames(
+  episode: PositionEpisode,
+  series: PriceSeries,
+  options: BuildFramesOptions = {},
+): Frame[] {
   const { times, marks } = readSeries(series);
   if (times.length === 0) return [];
 
@@ -215,6 +248,17 @@ export function buildFrames(episode: PositionEpisode, series: PriceSeries): Fram
       newFills,
       isFinal,
     });
+  }
+
+  const hold = Math.max(0, Math.floor(options.hold ?? OUTRO_HOLD_FRAMES));
+  const last = frames[frames.length - 1];
+  if (last) {
+    for (let i = 0; i < hold; i++) {
+      // `newFills` emptied deliberately: it drives the marker pop-in and the score's
+      // bass note, and a fill echoed once per held frame would fire a marker and a
+      // note thirty-six times for a position that closed once.
+      frames.push({ ...last, newFills: [] });
+    }
   }
 
   return frames;

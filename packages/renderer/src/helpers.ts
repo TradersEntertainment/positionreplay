@@ -85,6 +85,26 @@ export function axisDate(ts: number, spanMs: number): string {
   return clock;
 }
 
+/**
+ * How long a position was held, at the coarsest granularity that still says something.
+ *
+ * Two units, never three: "2D 03H" and "1H 05M" are read at a glance on a card, and
+ * "2D 03H 41M 12S" is read by nobody. Uppercase for the same reason everything else
+ * here is — SPEC §7.3 wants a terminal.
+ */
+export function holdingTime(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+
+  if (days > 0) return `${days}D ${pad2(hours)}H`;
+  if (hours > 0) return `${hours}H ${pad2(minutes)}M`;
+  if (minutes > 0) return `${minutes}M ${pad2(seconds)}S`;
+  return `${seconds}S`;
+}
+
 /** Full timestamp for the HUD, UTC so an exported image is unambiguous. */
 export function hudDate(ts: number): string {
   const d = new Date(ts);

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRenderJobStore } from './renderJobs.js';
+import { RENDER_VERSION } from '@trade-replay/renderer';
+import { createRenderJobStore, requestKeyFor } from './renderJobs.js';
 import { openCache, type CacheHandle } from './db.js';
 
 const handles: CacheHandle[] = [];
@@ -33,6 +34,13 @@ describe('enqueue', () => {
     expect(job.status).toBe('queued');
     expect(job.attempts).toBe(0);
     expect(job.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('keys on what the renderer draws, not only on what is being drawn', async () => {
+    // Without the renderer's version in the key, a file encoded before a drawing
+    // change answers every later request for that replay forever: the viewer watches
+    // a preview with the new ending and downloads one with the old.
+    expect(requestKeyFor(SPEC).startsWith(`v${RENDER_VERSION}|`)).toBe(true);
   });
 
   it('is idempotent for an identical request', async () => {

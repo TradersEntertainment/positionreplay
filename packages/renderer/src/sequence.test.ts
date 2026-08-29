@@ -2,6 +2,7 @@ import { buildEpisodes, buildFrames } from '@trade-replay/core';
 import type { Fill, PriceSeries } from '@trade-replay/core';
 import { describe, expect, it } from 'vitest';
 import { computeEnergyTrack } from './effects.js';
+import { outroStart } from './outro.js';
 import { createSequenceRenderer } from './sequence.js';
 import { createScale } from './scale.js';
 import { advanceScale, renderFrame } from './render.js';
@@ -30,6 +31,8 @@ function recordingContext(): { ctx: Canvas2D; calls: Call[] } {
     textBaseline: 'alphabetic',
     save: record('save'),
     restore: record('restore'),
+    translate: record('translate'),
+    scale: record('scale'),
     beginPath: record('beginPath'),
     closePath: record('closePath'),
     moveTo: record('moveTo'),
@@ -195,6 +198,37 @@ describe('createSequenceRenderer', () => {
     expect(renderer.lastIndex).toBe(12);
     renderer.reset();
     expect(renderer.lastIndex).toBe(-1);
+  });
+
+  it('ends on the closing card, so the export carries the outro too', () => {
+    // Same argument as the energy track: every path — player, WebM/GIF, M8's worker —
+    // comes through this function, so a replay cannot end one way on screen and
+    // another way in the file.
+    const start = outroStart(frames.length);
+    expect(start).toBeGreaterThan(0);
+
+    const before = recordingContext();
+    createSequenceRenderer(episode, series, frames, darkTheme).render(before.ctx, start - 1, LAYOUT);
+    expect(before.calls.some((c) => c.op === 'scale')).toBe(false);
+
+    const during = recordingContext();
+    const renderer = createSequenceRenderer(episode, series, frames, darkTheme);
+    renderer.render(during.ctx, frames.length - 1, LAYOUT);
+    expect(during.calls.some((c) => c.op === 'scale')).toBe(true);
+    // The result, spelled out at the size of the shot.
+    expect(during.calls.some((c) => c.op === 'fillText' && c.args[0] === 'TOTAL PNL')).toBe(true);
+    expect(during.calls.some((c) => c.op === 'fillText' && c.args[0] === 'HOLDING TIME')).toBe(true);
+  });
+
+  it('draws no card at all when the outro is switched off', () => {
+    const off = recordingContext();
+    createSequenceRenderer(episode, series, frames, darkTheme, { outro: false }).render(
+      off.ctx,
+      frames.length - 1,
+      LAYOUT,
+    );
+    expect(off.calls.some((c) => c.op === 'scale')).toBe(false);
+    expect(off.calls.some((c) => c.op === 'fillText' && c.args[0] === 'HOLDING TIME')).toBe(false);
   });
 
   it('ignores an out-of-range index rather than throwing', () => {

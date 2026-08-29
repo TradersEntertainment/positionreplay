@@ -17,6 +17,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { outroStart } from '@trade-replay/renderer';
 
 const BASE = process.env['PLAYER_URL'] ?? 'http://127.0.0.1:3100';
 const ADDRESS = process.env['VERIFY_ADDRESS'] ?? '0x393d0b87ed38fc779fd9611144ae649ba6082109';
@@ -136,8 +137,14 @@ async function run(browser: Browser): Promise<void> {
   const frameCount = Number(await page.getByTestId('player').getAttribute('data-frame-count'));
   record('a Perps position replays', frameCount > 40, `${frameCount} frames`);
 
-  // Seek to the end so every marker has appeared.
-  await page.getByTestId('scrubber').fill(String(frameCount - 1));
+  // Late enough that every marker has appeared, but before the closing card starts
+  // dimming the chart — on the final frame the liquidation marker is still drawn, at
+  // a tenth of its opacity, and no pixel is the exact colour any more.
+  //
+  // Taken from the renderer rather than from a number here, so this cannot drift out
+  // of step with the ending's own timing.
+  const lastChartFrame = Math.max(0, (outroStart(frameCount) === -1 ? frameCount : outroStart(frameCount)) - 1);
+  await page.getByTestId('scrubber').fill(String(lastChartFrame));
   await page.waitForTimeout(400);
 
   // #ff2d55 is theme.markerLiquidation — a colour used nowhere else.

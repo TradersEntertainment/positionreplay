@@ -12,7 +12,7 @@
  */
 
 import type { Frame, PositionEpisode, PriceSeries } from '@trade-replay/core';
-import { createPlaybackClock } from '@trade-replay/core';
+import { OUTRO_HOLD_FRAMES, createPlaybackClock } from '@trade-replay/core';
 import { createSequenceRenderer, darkTheme, type Canvas2D, type Note } from '@trade-replay/renderer';
 import { createReplayAudio } from './audio';
 
@@ -237,7 +237,12 @@ export async function recordVideo(
     recorder.addEventListener('stop', () => resolve(), { once: true });
   });
 
-  const clock = createPlaybackClock({ frameCount: scene.frames.length });
+  // Same clock the player uses, held frames and all, so the file is the clip that was
+  // watched — including how long the card sits at the end of it.
+  const clock = createPlaybackClock({
+    frameCount: scene.frames.length,
+    holdFrames: OUTRO_HOLD_FRAMES,
+  });
   const startedAt = performance.now();
 
   painter.paint(0);

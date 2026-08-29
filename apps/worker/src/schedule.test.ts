@@ -18,9 +18,30 @@ describe('climaxStart', () => {
   it('handles an empty timeline', () => {
     expect(climaxStart(0, true)).toBe(0);
   });
+
+  it('measures the tail against the trade, not the ending hold', () => {
+    // The held frames are the closing card. Counting them would push the slow-down
+    // past the exit — the position would close at full speed and the card would crawl.
+    expect(climaxStart(236, true, 36)).toBe(180);
+    expect(climaxStart(236, false, 36)).toBe(200);
+  });
 });
 
 describe('buildSchedule', () => {
+  it('plays the ending hold at full speed, however long the climax is', () => {
+    const { durations } = buildSchedule({
+      frameCount: 136,
+      fps: 30,
+      slowFinish: true,
+      holdFrames: 36,
+    });
+    const even = 1 / BASE_FPS;
+    // The last 36 are the card: a fixed second and a half, not five.
+    for (let i = 100; i < 136; i++) expect(durations[i]).toBeCloseTo(even, 10);
+    // The 10% before them is still the climax.
+    expect(durations[95]).toBeCloseTo(even / CLIMAX_SPEED, 10);
+  });
+
   it('holds every frame equally at normal speed', () => {
     const { durations } = buildSchedule({ frameCount: 48, fps: 30, slowFinish: false });
     expect(new Set(durations).size).toBe(1);

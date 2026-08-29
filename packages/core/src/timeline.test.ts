@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildEpisodes } from './episodes.js';
-import { buildFrames, pickInterval, seriesRangeFor } from './timeline.js';
+import { OUTRO_HOLD_FRAMES, buildFrames, pickInterval, seriesRangeFor } from './timeline.js';
 import type { IntervalSpec } from './timeline.js';
 import { fill, funding } from './test-helpers.js';
 import type { Candle, PriceSeries } from './types.js';
@@ -112,7 +112,7 @@ describe('buildFrames (SPEC §6.2)', () => {
   const series = ohlcv(0, MIN, 40, (i) => 100 + i);
 
   it('emits one frame per bar, in order', () => {
-    const frames = buildFrames(episode, series);
+    const frames = buildFrames(episode, series, { hold: 0 });
     expect(frames).toHaveLength(40);
     expect(frames.map((f) => f.t)).toEqual(series.kind === 'ohlcv' ? series.candles.map((c) => c.t) : []);
     for (let i = 1; i < frames.length; i++) {
@@ -226,12 +226,55 @@ describe('buildFrames (SPEC §6.2)', () => {
       interval: '1s',
       points: Array.from({ length: 40 }, (_, i) => ({ t: i * MIN, p: 100 + i })),
     };
-    const frames = buildFrames(episode, line);
+    const frames = buildFrames(episode, line, { hold: 0 });
     expect(frames).toHaveLength(40);
     expect(frames[20]!.markPrice).toBeCloseTo(120, 12);
   });
 
   it('returns no frames for an empty series rather than throwing', () => {
+    const empty: PriceSeries = { kind: 'ohlcv', instrument: 'HYPE-PERP', interval: '1m', candles: [] };
+    expect(buildFrames(episode, empty)).toEqual([]);
+  });
+});
+
+describe('buildFrames ending hold', () => {
+  const episode = buildEpisodes(
+    [
+      fill({ id: 'open', ts: 10 * MIN, side: 'buy', price: 100, size: 10, fee: 1 }),
+      fill({ id: 'close', ts: 38 * MIN, side: 'sell', price: 120, size: 10, fee: 2 }),
+    ],
+    HL,
+  )[0]!;
+
+  const series = ohlcv(0, MIN, 40, (i) => 100 + i);
+
+  it('adds frames after the last bar for the ending to play over', () => {
+    // Without these the closing card would have to be drawn over the final bars of
+    // the trade — which is where the position actually closes. The ending gets its
+    // own time rather than taking the climax's.
+    const frames = buildFrames(episode, series);
+    expect(frames).toHaveLength(40 + OUTRO_HOLD_FRAMES);
+  });
+
+  it('holds the final state exactly, so the card states the finished numbers', () => {
+    const frames = buildFrames(episode, series);
+    const last = frames.at(-1)!;
+    const lastBar = frames[39]!;
+    expect(last.totalPnl).toBe(lastBar.totalPnl);
+    expect(last.t).toBe(lastBar.t);
+    expect(last.visibleUpTo).toBe(lastBar.visibleUpTo);
+    expect(last.markPrice).toBe(lastBar.markPrice);
+    expect(last.isFinal).toBe(true);
+  });
+
+  it('never repeats a fill into the held frames', () => {
+    // newFills drives the marker pop-in and the score's bass note. A fill echoed 36
+    // times would fire 36 markers and 36 notes on a position that closed once.
+    const held = buildFrames(episode, series).slice(40);
+    expect(held.every((f) => f.newFills.length === 0)).toBe(true);
+  });
+
+  it('adds nothing to an empty series', () => {
     const empty: PriceSeries = { kind: 'ohlcv', instrument: 'HYPE-PERP', interval: '1m', candles: [] };
     expect(buildFrames(episode, empty)).toEqual([]);
   });

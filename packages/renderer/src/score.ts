@@ -21,6 +21,7 @@
 
 import type { PositionEpisode } from '@trade-replay/core';
 import type { FrameEnergy } from './effects.js';
+import { outroStart } from './outro.js';
 
 export interface Note {
   /** The frame this note sounds on. */
@@ -32,12 +33,14 @@ export interface Note {
   /** Seconds the note rings for, before its own decay. */
   duration: number;
   /**
-   * `lead` is the PnL melody, `bass` marks a fill.
+   * `lead` is the PnL melody, `bass` marks a fill, `end` is the closing note.
    *
-   * Two voices rather than one so the fills stay audible under a busy melody — they are
-   * the events a viewer is actually trying to spot.
+   * Separate voices rather than one so the fills stay audible under a busy melody — they
+   * are the events a viewer is actually trying to spot. `end` is named apart from `bass`
+   * even though it is synthesised the same way, because "every bass note is a fill" is
+   * something the rest of the code is entitled to rely on.
    */
-  voice: 'lead' | 'bass';
+  voice: 'lead' | 'bass' | 'end';
 }
 
 /** Semitone offsets. Major for a winning replay, minor for a losing one. */
@@ -144,6 +147,22 @@ export function composeScore(
       velocity: 0.75,
       duration: 2.4,
       voice: 'bass',
+    });
+  }
+
+  // The ending lands on one low root, on the frame the chart starts pulling back.
+  //
+  // Timed from outro.ts rather than from a constant here, so the note and the pull-back
+  // cannot drift apart: they are the same moment read twice. Longer and quieter than a
+  // fill's bass note — it is a resolution, not another event.
+  const ending = outroStart(frames.length);
+  if (ending >= 0) {
+    notes.push({
+      frame: ending,
+      midi: ROOT_MIDI - 12,
+      velocity: 0.85,
+      duration: 4.5,
+      voice: 'end',
     });
   }
 

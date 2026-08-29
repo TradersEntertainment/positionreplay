@@ -35,6 +35,7 @@
     "@trade-replay/adapters": "workspace:*",
     "@trade-replay/cache": "workspace:*",
     "@trade-replay/core": "workspace:*",
+    "@trade-replay/renderer": "workspace:*",
     "@types/node": "^22.19.0",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.1",

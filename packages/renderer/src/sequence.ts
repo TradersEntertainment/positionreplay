@@ -13,6 +13,7 @@
 
 import type { Frame, PositionEpisode, PriceSeries } from '@trade-replay/core';
 import { computeEnergyTrack, type FrameEnergy } from './effects.js';
+import { outroProgressAt } from './outro.js';
 import { advanceScale, renderFrame, type RenderOptions } from './render.js';
 import { createScale, type ScaleState } from './scale.js';
 import type { Canvas2D, RenderLayout, Theme } from './types.js';
@@ -71,16 +72,18 @@ export function createSequenceRenderer(
       // `exactOptionalPropertyTypes`: an absent track means absent, not `undefined`,
       // and the layers read absence as "draw the plain chart".
       const frameEnergy = energy[index];
-      renderFrame(
-        ctx,
-        frame,
-        episode,
-        series,
-        scale,
-        theme,
-        frameEnergy ? { ...layout, energy: frameEnergy } : layout,
-        options,
-      );
+      // Here for the same reason the energy track is: this is the one function every
+      // path goes through, so the ending is in the MP4 and the GIF without either
+      // export knowing it exists.
+      const outro = options.outro === false ? null : outroProgressAt(index, frames.length);
+
+      const frameLayout: RenderLayout = {
+        ...layout,
+        ...(frameEnergy ? { energy: frameEnergy } : {}),
+        ...(outro !== null ? { outro } : {}),
+      };
+
+      renderFrame(ctx, frame, episode, series, scale, theme, frameLayout, options);
     },
   };
 }

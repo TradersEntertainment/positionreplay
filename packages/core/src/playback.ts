@@ -37,6 +37,15 @@ export interface PlaybackState {
   /** Milliseconds banked toward the next frame. */
   accumulator: number;
   climax: boolean;
+  /**
+   * Trailing frames that are the closing card rather than the trade.
+   *
+   * `buildFrames` appends them (core/timeline.ts `OUTRO_HOLD_FRAMES`). They matter
+   * here for one reason: SPEC §6.3's climax is the last ~10% *of the trade*, and
+   * counting the card as part of it would push the slow-down past the exit — the
+   * position would close at full speed and then the card would crawl.
+   */
+  holdFrames: number;
 }
 
 export interface PlaybackClock {
@@ -51,7 +60,7 @@ export interface PlaybackClock {
   setSpeed(speed: PlaybackSpeed): void;
   setClimax(enabled: boolean): void;
   /** Replace the frame count when the interval override rebuilds the timeline. */
-  setFrameCount(frameCount: number): void;
+  setFrameCount(frameCount: number, holdFrames?: number): void;
   /** Feed elapsed milliseconds; returns the resulting frame index. */
   advance(deltaMs: number): number;
   reset(): void;
@@ -61,6 +70,8 @@ export interface PlaybackOptions {
   frameCount: number;
   speed?: PlaybackSpeed;
   climax?: boolean;
+  /** See `PlaybackState.holdFrames`. Defaults to 0, which is the pre-card behaviour. */
+  holdFrames?: number;
 }
 
 export function createPlaybackClock(options: PlaybackOptions): PlaybackClock {
@@ -71,6 +82,7 @@ export function createPlaybackClock(options: PlaybackOptions): PlaybackClock {
     speed: options.speed ?? 1,
     accumulator: 0,
     climax: options.climax ?? false,
+    holdFrames: Math.max(0, Math.floor(options.holdFrames ?? 0)),
   };
 
   const lastIndex = (): number => Math.max(0, state.frameCount - 1);
@@ -82,7 +94,11 @@ export function createPlaybackClock(options: PlaybackOptions): PlaybackClock {
    * slows playback from that frame on rather than from the next call.
    */
   const msForFrame = (index: number): number => {
-    const inTail = state.climax && index >= state.frameCount * (1 - CLIMAX_TAIL_RATIO);
+    // Measured against the trade, so the card neither steals the climax nor inherits
+    // its 0.3x — a fixed second and a half at 24fps would otherwise become five.
+    const traded = Math.max(1, state.frameCount - state.holdFrames);
+    const inTail =
+      state.climax && index >= traded * (1 - CLIMAX_TAIL_RATIO) && index < traded;
     const fps = BASE_FPS * state.speed * (inTail ? CLIMAX_SPEED : 1);
     return 1_000 / fps;
   };
@@ -134,8 +150,9 @@ export function createPlaybackClock(options: PlaybackOptions): PlaybackClock {
       state.climax = enabled;
     },
 
-    setFrameCount(frameCount: number): void {
+    setFrameCount(frameCount: number, holdFrames?: number): void {
       state.frameCount = Math.max(0, Math.floor(frameCount));
+      if (holdFrames !== undefined) state.holdFrames = Math.max(0, Math.floor(holdFrames));
       state.frameIndex = clamp(state.frameIndex);
       state.accumulator = 0;
     },

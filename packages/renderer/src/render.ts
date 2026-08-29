@@ -22,6 +22,7 @@ import { drawEntryLine } from './layers/entryLine.js';
 import { drawGrid } from './layers/grid.js';
 import { drawHud } from './layers/hud.js';
 import { drawMarkers } from './layers/markers.js';
+import { drawOutro, outroPullback } from './layers/outro.js';
 import { drawBurst, drawPulse } from './layers/pulse.js';
 import { drawSeries } from './layers/series.js';
 import { drawWatermark } from './layers/watermark.js';
@@ -88,6 +89,14 @@ export interface RenderOptions {
    * for one of them and not the other breaks SPEC §9's pixel identity.
    */
   effects?: boolean;
+  /**
+   * The closing card (outro.ts). On by default.
+   *
+   * Same caveat as `effects`: this exists so a caller can render the plain chart, not
+   * so the export and the preview can differ. Turning it off for one and not the other
+   * breaks SPEC §9's pixel identity.
+   */
+  outro?: boolean;
 }
 
 /**
@@ -166,7 +175,14 @@ export function renderFrame(
   };
 
   // SPEC §7.1 draw order. Order is the layering.
+  //
+  // The background is outside the outro's pull-back so the shrinking frame has
+  // something to shrink against; everything else is inside it, which is what lets a
+  // layer be added later without knowing the ending exists.
   drawBackground(ctx, context);
+
+  ctx.save();
+  outroPullback(ctx, context);
   drawGrid(ctx, context);
   // Behind the candles: the burst is the newest candle reacting to its own size, so
   // painting it on top would cover the very thing it is reacting to.
@@ -179,4 +195,8 @@ export function renderFrame(
   drawMarkers(ctx, context);
   drawHud(ctx, context);
   drawWatermark(ctx, context);
+  ctx.restore();
+
+  // Last, and untransformed: the closing card is the shot, not part of the scene.
+  drawOutro(ctx, context);
 }

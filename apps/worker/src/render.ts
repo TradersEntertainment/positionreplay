@@ -22,7 +22,7 @@ import { mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createCanvas } from '@napi-rs/canvas';
-import { buildFrames } from '@trade-replay/core';
+import { OUTRO_HOLD_FRAMES, buildFrames } from '@trade-replay/core';
 import type { Frame } from '@trade-replay/core';
 import { createSequenceRenderer, darkTheme, lightTheme } from '@trade-replay/renderer';
 import type { Canvas2D } from '@trade-replay/renderer';
@@ -114,6 +114,9 @@ export async function renderMp4(options: RenderOptions): Promise<RenderOutput> {
     frameCount: frames.length,
     fps: spec.fps,
     slowFinish: spec.slowFinish,
+    // buildFrames appended these for the closing card; they are not part of the trade
+    // and so not part of the climax. Same rule as the player's clock.
+    holdFrames: OUTRO_HOLD_FRAMES,
   });
   const playlist = join(workDir, 'frames.txt');
   writeFileSync(playlist, ffconcatFor(files, schedule.durations));
